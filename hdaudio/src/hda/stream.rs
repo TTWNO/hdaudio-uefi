@@ -1,12 +1,13 @@
-use syscall::PAGE_SIZE;
-use syscall::error::{Error, EIO, Result};
-use syscall::io::{Mmio, Io};
+//use syscall::PAGE_SIZE;
+//use syscall::error::{Error, EIO, Result};
+//use syscall::io::{Mmio, Io};
 use std::result;
+use std::error::Error;
 use std::cmp::min;
 use std::ptr::copy_nonoverlapping;
 use std::ptr;
 
-extern crate syscall;
+pub static PAGE_SIZE: u32 = 4096;
 
 pub enum BaseRate {
 	BR44_1,
@@ -77,18 +78,18 @@ pub fn format_to_u16(sr: &SampleRate, bps: BitsPerSample, channels:u8) -> u16{
 
 #[repr(packed)]
 pub struct StreamDescriptorRegs {
-	ctrl_lo:            Mmio<u16>,
-	ctrl_hi:            Mmio<u8>,
-	status:             Mmio<u8>,
-	link_pos:           Mmio<u32>,
-	buff_length:        Mmio<u32>,
-	last_valid_index:   Mmio<u16>,
-	resv1:              Mmio<u16>,
-	fifo_size_:         Mmio<u16>,
-	format:             Mmio<u16>,
-	resv2:              Mmio<u32>,
-	buff_desc_list_lo:  Mmio<u32>,
-	buff_desc_list_hi:  Mmio<u32>,
+	ctrl_lo:            *mut u16,
+	ctrl_hi:            *mut u8,
+	status:             *mut u8,
+	link_pos:           *mut u32,
+	buff_length:        *mut u32,
+	last_valid_index:   *mut u16,
+	resv1:              *mut u16,
+	fifo_size_:         *mut u16,
+	format:             *mut u16,
+	resv2:              *mut u32,
+	buff_desc_list_lo:  *mut u32,
+	buff_desc_list_hi:  *mut u32,
 
 }
 
@@ -246,10 +247,10 @@ impl OutputStream {
 
 #[repr(packed)]
 pub struct BufferDescriptorListEntry {
-	addr_low: Mmio<u32>,
-	addr_high: Mmio<u32>,
-	len:      Mmio<u32>,
-	ioc_resv: Mmio<u32>,
+	addr_low: *mut u32,
+	addr_high: *mut u32,
+	len:      *mut u32,
+	ioc_resv: *mut u32,
 }
 
 impl BufferDescriptorListEntry {

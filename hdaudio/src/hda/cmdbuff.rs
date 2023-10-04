@@ -1,4 +1,4 @@
-use syscall::io::{Io, Mmio};
+//use syscall::io::{Io, Mmio};
 
 use super::common::*;
 
@@ -34,34 +34,34 @@ const COMMAND_BUFFER_OFFSET: usize = 0x40;
 const CORB_BUFF_MAX_SIZE: usize = 1024;
 
 struct CommandBufferRegs {
-    corblbase: Mmio<u32>,
-    corbubase: Mmio<u32>,
-    corbwp: Mmio<u16>,
-    corbrp: Mmio<u16>,
-    corbctl: Mmio<u8>,
-    corbsts: Mmio<u8>,
-    corbsize: Mmio<u8>,
-    rsvd5: Mmio<u8>,
+    corblbase: *mut u32,
+    corbubase: *mut u32,
+    corbwp: *mut u16,
+    corbrp: *mut u16,
+    corbctl: *mut u8,
+    corbsts: *mut u8,
+    corbsize: *mut u8,
+    rsvd5: *mut u8,
 
-    rirblbase: Mmio<u32>,
-    rirbubase: Mmio<u32>,
-    rirbwp: Mmio<u16>,
-    rintcnt: Mmio<u16>,
-    rirbctl: Mmio<u8>,
-    rirbsts: Mmio<u8>,
-    rirbsize: Mmio<u8>,
-    rsvd6: Mmio<u8>,
+    rirblbase: *mut u32,
+    rirbubase: *mut u32,
+    rirbwp: *mut u16,
+    rintcnt: *mut u16,
+    rirbctl: *mut u8,
+    rirbsts: *mut u8,
+    rirbsize: *mut u8,
+    rsvd6: *mut u8,
 }
 
 struct CorbRegs {
-    corblbase: Mmio<u32>,
-    corbubase: Mmio<u32>,
-    corbwp: Mmio<u16>,
-    corbrp: Mmio<u16>,
-    corbctl: Mmio<u8>,
-    corbsts: Mmio<u8>,
-    corbsize: Mmio<u8>,
-    rsvd5: Mmio<u8>,
+    corblbase: *mut u32,
+    corbubase: *mut u32,
+    corbwp: *mut u16,
+    corbrp: *mut u16,
+    corbctl: *mut u8,
+    corbsts: *mut u8,
+    corbsize: *mut u8,
+    rsvd5: *mut u8,
 }
 
 struct Corb {
@@ -189,14 +189,14 @@ impl Corb {
 }
 
 struct RirbRegs {
-    rirblbase: Mmio<u32>,
-    rirbubase: Mmio<u32>,
-    rirbwp: Mmio<u16>,
-    rintcnt: Mmio<u16>,
-    rirbctl: Mmio<u8>,
-    rirbsts: Mmio<u8>,
-    rirbsize: Mmio<u8>,
-    rsvd6: Mmio<u8>,
+    rirblbase: *mut u32,
+    rirbubase: *mut u32,
+    rirbwp: *mut u16,
+    rintcnt: *mut u16,
+    rirbctl: *mut u8,
+    rirbsts: *mut u8,
+    rirbsize: *mut u8,
+    rsvd6: *mut u8,
 }
 
 struct Rirb {
@@ -292,10 +292,10 @@ impl Rirb {
 }
 
 struct ImmediateCommandRegs {
-    icoi: Mmio<u32>,
-    irii: Mmio<u32>,
-    ics: Mmio<u16>,
-    rsvd7: [Mmio<u8>; 6],
+    icoi: *mut u32,
+    irii: *mut u32,
+    ics: *mut u16,
+    rsvd7: [*mut u8; 6],
 }
 
 pub struct ImmediateCommand {

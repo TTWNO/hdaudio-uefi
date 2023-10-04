@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::{env, io};
 
-use std::os::unix::io::{FromRawFd, RawFd};
+use std::os::fd::{FromRawFd, RawFd};
 
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use thiserror::Error;

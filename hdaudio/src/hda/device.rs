@@ -1,5 +1,8 @@
 #![allow(dead_code)]
 
+use std::alloc::alloc;
+use std::alloc::Layout;
+use std::error::Error;
 use std::cmp;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -7,10 +10,10 @@ use std::str;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use syscall::error::{Error, EACCES, EBADF, Result, EINVAL};
-use syscall::flag::{SEEK_SET, SEEK_CUR, SEEK_END};
-use syscall::io::{Mmio, Io};
-use syscall::scheme::SchemeBlockMut;
+//use syscall::error::{Error, EACCES, EBADF, Result, EINVAL};
+//use syscall::flag::{SEEK_SET, SEEK_CUR, SEEK_END};
+//use syscall::io::{Mmio, Io};
+//use syscall::scheme::SchemeBlockMut;
 
 use spin::Mutex;
 
@@ -67,52 +70,52 @@ enum Handle {
 #[repr(packed)]
 #[allow(dead_code)]
 struct Regs {
-	gcap:       Mmio<u16>,
-	vmin:       Mmio<u8>,
-	vmaj:       Mmio<u8>,
-	outpay:     Mmio<u16>,
-	inpay:      Mmio<u16>,
-	gctl:       Mmio<u32>,
-	wakeen:     Mmio<u16>,
-	statests:   Mmio<u16>,
-	gsts:       Mmio<u16>,
-	rsvd0:      [Mmio<u8>;  6],
-	outstrmpay: Mmio<u16>,
-	instrmpay:  Mmio<u16>,
-	rsvd1:      [Mmio<u8>;  4],
-	intctl:     Mmio<u32>,
-	intsts:     Mmio<u32>,
-	rsvd2:      [Mmio<u8>;  8],
-	walclk:     Mmio<u32>,
-	rsvd3:      Mmio<u32>,
-	ssync:      Mmio<u32>,
-	rsvd4:      Mmio<u32>,
+	gcap:       *mut u16,
+	vmin:       *mut u8,
+	vmaj:       *mut u8,
+	outpay:     *mut u16,
+	inpay:      *mut u16,
+	gctl:       *mut u32,
+	wakeen:     *mut u16,
+	statests:   *mut u16,
+	gsts:       *mut u16,
+	rsvd0:      [*mut u8;  6],
+	outstrmpay: *mut u16,
+	instrmpay:  *mut u16,
+	rsvd1:      [*mut u8;  4],
+	intctl:     *mut u32,
+	intsts:     *mut u32,
+	rsvd2:      [*mut u8;  8],
+	walclk:     *mut u32,
+	rsvd3:      *mut u32,
+	ssync:      *mut u32,
+	rsvd4:      *mut u32,
 
-	corblbase:  Mmio<u32>,
-	corbubase:  Mmio<u32>,
-	corbwp:     Mmio<u16>,
-	corbrp:     Mmio<u16>,
-	corbctl:    Mmio<u8>,
-	corbsts:    Mmio<u8>,
-	corbsize:   Mmio<u8>,
-	rsvd5:      Mmio<u8>,
+	corblbase:  *mut u32,
+	corbubase:  *mut u32,
+	corbwp:     *mut u16,
+	corbrp:     *mut u16,
+	corbctl:    *mut u8,
+	corbsts:    *mut u8,
+	corbsize:   *mut u8,
+	rsvd5:      *mut u8,
 
-	rirblbase:  Mmio<u32>,
-	rirbubase:  Mmio<u32>,
-	rirbwp:     Mmio<u16>,
-	rintcnt:    Mmio<u16>,
-	rirbctl:    Mmio<u8>,
-	rirbsts:    Mmio<u8>,
-	rirbsize:   Mmio<u8>,
-	rsvd6:      Mmio<u8>,
+	rirblbase:  *mut u32,
+	rirbubase:  *mut u32,
+	rirbwp:     *mut u16,
+	rintcnt:    *mut u16,
+	rirbctl:    *mut u8,
+	rirbsts:    *mut u8,
+	rirbsize:   *mut u8,
+	rsvd6:      *mut u8,
 
-	icoi:       Mmio<u32>,
-	irii:       Mmio<u32>,
-	ics:        Mmio<u16>,
-	rsvd7:      [Mmio<u8>;  6],
+	icoi:       *mut u32,
+	irii:       *mut u32,
+	ics:        *mut u16,
+	rsvd7:      [*mut u8;  6],
 
-	dplbase:    Mmio<u32>, // 0x70
-	dpubase:    Mmio<u32>, // 0x74
+	dplbase:    *mut u32, // 0x70
+	dpubase:    *mut u32, // 0x74
 }
 
 pub struct IntelHDA {
@@ -152,18 +155,14 @@ pub struct IntelHDA {
 impl IntelHDA {
 	pub unsafe fn new(base: usize, vend_prod:u32) -> Result<Self> {
 		let regs = &mut *(base as *mut Regs);
+    let buf_layout = Layout::new::<[BufferDescriptorListEntry;256]>();
 
 		let buff_desc_phys =
-			syscall::physalloc(0x1000)
-				.expect("Could not allocate physical memory for buffer descriptor list.");
+      alloc(buf_layout);
 
-		let buff_desc_virt =
-			common::physmap(buff_desc_phys, 0x1000, common::Prot::RW, common::MemoryType::Uncacheable)
-				.expect("ihdad: failed to map address for buffer descriptor list.") as usize;
+		log::debug!("Phys: {:016X}", buff_desc_phys);
 
-		log::debug!("Virt: {:016X}, Phys: {:016X}", buff_desc_virt, buff_desc_phys);
-
-		let buff_desc = &mut *(buff_desc_virt as *mut [BufferDescriptorListEntry;256]);
+		let buff_desc = &mut *(buff_desc_phys as *mut [BufferDescriptorListEntry;256]);
 
 		let cmd_buff_address =
 			syscall::physalloc(0x1000)
