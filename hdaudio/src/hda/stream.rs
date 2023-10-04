@@ -2,11 +2,16 @@
 //use syscall::error::{Error, EIO, Result};
 //use syscall::io::{Mmio, Io};
 use std::result;
+use std::alloc::alloc;
+use std::alloc::dealloc;
+use std::alloc::Layout;
 use std::io::Error;
 use std::io::ErrorKind;
 use std::cmp::min;
 use std::ptr::copy_nonoverlapping;
 use std::ptr;
+use super::io::Mmio;
+use super::io::Io;
 
 pub static PAGE_SIZE: u32 = 4096;
 
@@ -79,18 +84,18 @@ pub fn format_to_u16(sr: &SampleRate, bps: BitsPerSample, channels:u8) -> u16{
 
 #[repr(packed)]
 pub struct StreamDescriptorRegs {
-	ctrl_lo:            *mut u16,
-	ctrl_hi:            *mut u8,
-	status:             *mut u8,
-	link_pos:           *mut u32,
-	buff_length:        *mut u32,
-	last_valid_index:   *mut u16,
-	resv1:              *mut u16,
-	fifo_size_:         *mut u16,
-	format:             *mut u16,
-	resv2:              *mut u32,
-	buff_desc_list_lo:  *mut u32,
-	buff_desc_list_hi:  *mut u32,
+	ctrl_lo:            Mmio<u16>,
+	ctrl_hi:            Mmio<u8>,
+	status:             Mmio<u8>,
+	link_pos:           Mmio<u32>,
+	buff_length:        Mmio<u32>,
+	last_valid_index:   Mmio<u16>,
+	resv1:              Mmio<u16>,
+	fifo_size_:         Mmio<u16>,
+	format:             Mmio<u16>,
+	resv2:              Mmio<u32>,
+	buff_desc_list_lo:  Mmio<u32>,
+	buff_desc_list_hi:  Mmio<u32>,
 
 }
 
@@ -218,7 +223,7 @@ impl OutputStream {
 		}
 	}
 
-	pub fn write_block(&mut self, buf: &[u8]) -> Result<usize> {
+	pub fn write_block(&mut self, buf: &[u8]) -> Result<usize, Error> {
 		self.buff.write_block(buf)
 	}
 
@@ -248,10 +253,10 @@ impl OutputStream {
 
 #[repr(packed)]
 pub struct BufferDescriptorListEntry {
-	addr_low: *mut u32,
-	addr_high: *mut u32,
-	len:      *mut u32,
-	ioc_resv: *mut u32,
+	addr_low: Mmio<u32>,
+	addr_high: Mmio<u32>,
+	len:      Mmio<u32>,
+	ioc_resv: Mmio<u32>,
 }
 
 impl BufferDescriptorListEntry {
@@ -294,37 +299,18 @@ pub struct StreamBuffer {
 
 impl StreamBuffer {
 	pub fn new(block_length: usize, block_count: usize) -> result::Result<StreamBuffer, &'static str> {
-    let page_aligned_size = (block_length * block_count).next_multiple_of(PAGE_SIZE);
-
-		let phys = match unsafe {
-			syscall::physalloc(page_aligned_size)
-		} {
-			Ok(phys) => phys,
-			Err(_err) => {
-				return Err("Could not allocate physical memory for buffer.");
-			}
-		};
-
-		let addr = match unsafe {
-			common::physmap(phys, page_aligned_size, common::Prot::RW, common::MemoryType::Uncacheable)
-		} {
-			Ok(ptr) => ptr as usize,
-			Err(_err) => {
-				unsafe {
-					syscall::physfree(phys, page_aligned_size);
-				}
-				return Err("Could not map physical memory for buffer.");
-			}
-		};
+    let size = block_length + block_count;
+    let layout = Layout::from_size_align(size, 4096).unwrap();
+    let ptr: *mut u8 = unsafe { alloc(layout) }; 
 
     // TODO: Already zeroed by kernel?
 		unsafe {
-			ptr::write_bytes(addr as *mut u8, 0, block_length * block_count);
+			ptr::write_bytes(ptr, 0, block_length * block_count);
 		}
 
 		Ok(StreamBuffer {
-			phys:   phys,
-			addr:   addr,
+			addr:   ptr as usize,
+      phys: ptr as usize,
 			block_len: block_length,
 			block_cnt:  block_count,
 			cur_pos: 0,
@@ -336,7 +322,7 @@ impl StreamBuffer {
 	}
 
 	pub fn addr(&self) -> usize {
-		self.addr
+		self.phys
 	}
 
 	pub fn phys(&self) -> usize {
@@ -355,9 +341,9 @@ impl StreamBuffer {
 		self.cur_pos
 	}
 
-	pub fn write_block(&mut self, buf: &[u8]) -> Result<usize> {
+	pub fn write_block(&mut self, buf: &[u8]) -> Result<usize, Error> {
 		if buf.len() != self.block_size() {
-			return Err(Error::new(ErrorKind::Interrupted))
+			return Err(Error::new(ErrorKind::Interrupted, "Length != block size"))
 		}
 		let len = min(self.block_size(), buf.len());
 
@@ -378,11 +364,12 @@ impl Drop for StreamBuffer {
 	fn drop(&mut self) {
 		unsafe {
 			log::debug!("IHDA: Deallocating buffer.");
-      let page_aligned_size = (self.block_len * self.block_cnt).next_multiple_of(PAGE_SIZE);
+      let page_aligned_size = (self.block_len * self.block_cnt).next_multiple_of(4096);
 
-			if syscall::funmap(self.addr, page_aligned_size).is_ok() {
-				let _ = syscall::physfree(self.phys, page_aligned_size);
-			}
+      let layout = Layout::from_size_align(self.block_len * self.block_cnt, 4096).unwrap();
+      unsafe {
+        dealloc(self.addr as *mut u8, layout);
+      }
 		}
 	}
 }

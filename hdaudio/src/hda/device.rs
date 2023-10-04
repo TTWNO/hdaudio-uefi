@@ -26,6 +26,8 @@ use super::BitsPerSample;
 use super::CommandBuffer;
 use super::HDANode;
 use super::OutputStream;
+use super::io::Mmio;
+use super::io::Io;
 
 // GCTL - Global Control
 const CRST:   u32 = 1 << 0; // 1 bit
@@ -71,52 +73,52 @@ enum Handle {
 #[repr(packed)]
 #[allow(dead_code)]
 struct Regs {
-	gcap:       *mut u16,
-	vmin:       *mut u8,
-	vmaj:       *mut u8,
-	outpay:     *mut u16,
-	inpay:      *mut u16,
-	gctl:       *mut u32,
-	wakeen:     *mut u16,
-	statests:   *mut u16,
-	gsts:       *mut u16,
-	rsvd0:      [*mut u8;  6],
-	outstrmpay: *mut u16,
-	instrmpay:  *mut u16,
-	rsvd1:      [*mut u8;  4],
-	intctl:     *mut u32,
-	intsts:     *mut u32,
-	rsvd2:      [*mut u8;  8],
-	walclk:     *mut u32,
-	rsvd3:      *mut u32,
-	ssync:      *mut u32,
-	rsvd4:      *mut u32,
+	gcap:       Mmio<u16>,
+	vmin:       Mmio<u8>,
+	vmaj:       Mmio<u8>,
+	outpay:     Mmio<u16>,
+	inpay:      Mmio<u16>,
+	gctl:       Mmio<u32>,
+	wakeen:     Mmio<u16>,
+	statests:   Mmio<u16>,
+	gsts:       Mmio<u16>,
+	rsvd0:      [Mmio<u8>;  6],
+	outstrmpay: Mmio<u16>,
+	instrmpay:  Mmio<u16>,
+	rsvd1:      [Mmio<u8>;  4],
+	intctl:     Mmio<u32>,
+	intsts:     Mmio<u32>,
+	rsvd2:      [Mmio<u8>;  8],
+	walclk:     Mmio<u32>,
+	rsvd3:      Mmio<u32>,
+	ssync:      Mmio<u32>,
+	rsvd4:      Mmio<u32>,
 
-	corblbase:  *mut u32,
-	corbubase:  *mut u32,
-	corbwp:     *mut u16,
-	corbrp:     *mut u16,
-	corbctl:    *mut u8,
-	corbsts:    *mut u8,
-	corbsize:   *mut u8,
-	rsvd5:      *mut u8,
+	corblbase:  Mmio<u32>,
+	corbubase:  Mmio<u32>,
+	corbwp:     Mmio<u16>,
+	corbrp:     Mmio<u16>,
+	corbctl:    Mmio<u8>,
+	corbsts:    Mmio<u8>,
+	corbsize:   Mmio<u8>,
+	rsvd5:      Mmio<u8>,
 
-	rirblbase:  *mut u32,
-	rirbubase:  *mut u32,
-	rirbwp:     *mut u16,
-	rintcnt:    *mut u16,
-	rirbctl:    *mut u8,
-	rirbsts:    *mut u8,
-	rirbsize:   *mut u8,
-	rsvd6:      *mut u8,
+	rirblbase:  Mmio<u32>,
+	rirbubase:  Mmio<u32>,
+	rirbwp:     Mmio<u16>,
+	rintcnt:    Mmio<u16>,
+	rirbctl:    Mmio<u8>,
+	rirbsts:    Mmio<u8>,
+	rirbsize:   Mmio<u8>,
+	rsvd6:      Mmio<u8>,
 
-	icoi:       *mut u32,
-	irii:       *mut u32,
-	ics:        *mut u16,
-	rsvd7:      [*mut u8;  6],
+	icoi:       Mmio<u32>,
+	irii:       Mmio<u32>,
+	ics:        Mmio<u16>,
+	rsvd7:      [Mmio<u8>;  6],
 
-	dplbase:    *mut u32, // 0x70
-	dpubase:    *mut u32, // 0x74
+	dplbase:    Mmio<u32>, // 0x70
+	dpubase:    Mmio<u32>, // 0x74
 }
 
 pub struct IntelHDA {
@@ -154,30 +156,27 @@ pub struct IntelHDA {
 }
 
 impl IntelHDA {
-	pub unsafe fn new(base: usize, vend_prod:u32) -> Result<Self> {
+	pub unsafe fn new(base: usize, vend_prod:u32) -> Result<Self, Error> {
 		let regs = &mut *(base as *mut Regs);
     let buf_layout = Layout::new::<[BufferDescriptorListEntry;256]>();
 
-		let buff_desc_phys =
-      alloc(buf_layout);
+    
+		let buff_desc_phys: *mut u8 = unsafe { alloc(buf_layout) };
 
-		log::debug!("Phys: {:016X}", buff_desc_phys);
+		log::debug!("Phys: {:016X}", buff_desc_phys as usize);
 
 		let buff_desc = &mut *(buff_desc_phys as *mut [BufferDescriptorListEntry;256]);
 
-		let cmd_buff_address =
-			syscall::physalloc(0x1000)
-				.expect("Could not allocate physical memory for CORB and RIRB.");
+    let cmd_layout = Layout::from_size_align(0x1000, 0x1000).unwrap();
+    let cmd_ptr: *mut u8 = unsafe { alloc(cmd_layout) };
 
-		let cmd_buff_virt = common::physmap(cmd_buff_address, 0x1000, common::Prot::RW, common::MemoryType::Uncacheable).expect("ihdad: failed to map address for CORB/RIRB buff") as usize;
-
-		log::debug!("Virt: {:016X}, Phys: {:016X}", cmd_buff_virt, cmd_buff_address);
+		log::debug!("Phys: {:016X}", cmd_ptr as usize);
 		let mut module = IntelHDA {
 			vend_prod: vend_prod,
 			base: base,
 			regs: regs,
 
-			cmd: CommandBuffer::new(base + COMMAND_BUFFER_OFFSET, cmd_buff_address, cmd_buff_virt),
+			cmd: CommandBuffer::new(base + COMMAND_BUFFER_OFFSET, cmd_ptr as usize),
 
 			beep_addr: (0,0),
 
@@ -192,7 +191,7 @@ impl IntelHDA {
 			input_pins: Vec::<WidgetAddr>::new(),
 
 			buff_desc: buff_desc,
-			buff_desc_phys: buff_desc_phys,
+			buff_desc_phys: buff_desc_phys as usize,
 
 			output_streams: Vec::<OutputStream>::new(),
 
@@ -784,7 +783,7 @@ impl IntelHDA {
 		self.cmd.cmd4(addr, 0x3, payload);
 	}
 
-	pub fn write_to_output(&mut self, index:u8, buf: &[u8]) -> Result<Option<usize>> {
+	pub fn write_to_output(&mut self, index:u8, buf: &[u8]) -> Result<Option<usize>, Error> {
 		let output = self.get_output_stream_descriptor(index as usize).unwrap();
 		let os = self.output_streams.get_mut(index as usize).unwrap();
 
@@ -907,8 +906,8 @@ impl Drop for IntelHDA {
 	}
 }
 
-impl TODO for IntelHDA {
-	fn open(&mut self, path: &str, _flags: usize, uid: u32, _gid: u32) -> Result<Option<usize>> {
+impl IntelHDA {
+	fn open(&mut self, path: &str, _flags: usize, uid: u32, _gid: u32) -> Result<Option<usize>, Error> {
 		//let path: Vec<&str>;
 		/*
 		match str::from_utf8(_path) {
@@ -932,13 +931,13 @@ impl TODO for IntelHDA {
 			self.handles.lock().insert(id, handle);
 			Ok(Some(id))
 		} else {
-			Err(Error::new(ErrorKind::PermissionDenied))
+			Err(Error::new(ErrorKind::PermissionDenied, "No access"))
 		}
 	}
 
-	fn read(&mut self, id: usize, buf: &mut [u8]) -> Result<Option<usize>> {
+	fn read(&mut self, id: usize, buf: &mut [u8]) -> Result<Option<usize>, Error> {
         let mut handles = self.handles.lock();
-        match *handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other))? {
+        match *handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other, "Unfindable"))? {
 			Handle::StrBuf(ref strbuf, ref mut size) => {
 				let mut i = 0;
 				while i < buf.len() && *size < strbuf.len() {
@@ -948,16 +947,16 @@ impl TODO for IntelHDA {
 				}
 				Ok(Some(i))
 			},
-			_ => Err(Error::new(ErrorKind::Other)),
+			_ => Err(Error::new(ErrorKind::Other, "Unfindable")),
 		}
 	}
 
-	fn write(&mut self, id: usize, buf: &[u8]) -> Result<Option<usize>> {
+	fn write(&mut self, id: usize, buf: &[u8]) -> Result<Option<usize>, Error> {
 		let index = {
 	        let mut handles = self.handles.lock();
-	        match handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other))? {
+	        match handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other, "Unfindable"))? {
 				Handle::Todo => 0,
-				_ => return Err(Error::new(ErrorKind::Other)),
+				_ => return Err(Error::new(ErrorKind::Other, "Unfindable")),
 			}
 		};
 
@@ -966,28 +965,28 @@ impl TODO for IntelHDA {
 		self.write_to_output(index, buf)
 	}
 
-	fn seek(&mut self, id: usize, pos: isize, whence: usize) -> Result<Option<isize>> {
+	fn seek(&mut self, id: usize, pos: isize, whence: usize) -> Result<Option<isize>, Error> {
 	    let pos = pos as usize;
 		let mut handles = self.handles.lock();
-		match *handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other))? {
+		match *handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other, "Unfindable"))? {
 			Handle::StrBuf(ref mut strbuf, ref mut size) => {
 				let len = strbuf.len() as usize;
 				*size = match whence {
 					SEEK_SET => cmp::min(len, pos),
 					SEEK_CUR => cmp::max(0, cmp::min(len as isize, *size as isize + pos as isize)) as usize,
 					SEEK_END => cmp::max(0, cmp::min(len as isize,   len as isize + pos as isize)) as usize,
-					_ => return Err(Error::new(ErrorKind::InvalidInput))
+					_ => return Err(Error::new(ErrorKind::InvalidInput, "Input failed to process"))
 				};
 				Ok(Some(*size as isize))
 			},
 
-			_ => Err(Error::new(ErrorKind::InvalidInput)),
+			_ => Err(Error::new(ErrorKind::InvalidInput, "Input failed to process")),
         }
 	}
 
-    fn fpath(&mut self, id: usize, buf: &mut [u8]) -> Result<Option<usize>> {
+    fn fpath(&mut self, id: usize, buf: &mut [u8]) -> Result<Option<usize>, Error> {
         let mut handles = self.handles.lock();
-        let _handle = handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other))?;
+        let _handle = handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other, "Unfindiable"))?;
 
         let mut i = 0;
         let scheme_path = b"audiohw:";
@@ -998,8 +997,8 @@ impl TODO for IntelHDA {
         Ok(Some(i))
     }
 
-	fn close(&mut self, id: usize) -> Result<Option<usize>> {
+	fn close(&mut self, id: usize) -> Result<Option<usize>, Error> {
 		let mut handles = self.handles.lock();
-    	handles.remove(&id).ok_or(Error::new(ErrorKind::Other)).and(Ok(Some(0)))
+    	handles.remove(&id).ok_or(Error::new(ErrorKind::Other, "Unfindable")).and(Ok(Some(0)))
 	}
 }
