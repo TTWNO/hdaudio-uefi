@@ -2,7 +2,8 @@
 //use syscall::error::{Error, EIO, Result};
 //use syscall::io::{Mmio, Io};
 use std::result;
-use std::error::Error;
+use std::io::Error;
+use std::io::ErrorKind;
 use std::cmp::min;
 use std::ptr::copy_nonoverlapping;
 use std::ptr;
@@ -356,7 +357,7 @@ impl StreamBuffer {
 
 	pub fn write_block(&mut self, buf: &[u8]) -> Result<usize> {
 		if buf.len() != self.block_size() {
-			return Err(Error::new(EIO))
+			return Err(Error::new(ErrorKind::Interrupted))
 		}
 		let len = min(self.block_size(), buf.len());
 

@@ -2,7 +2,8 @@
 
 use std::alloc::alloc;
 use std::alloc::Layout;
-use std::error::Error;
+use std::io::Error;
+use std::io::ErrorKind;
 use std::cmp;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -931,13 +932,13 @@ impl TODO for IntelHDA {
 			self.handles.lock().insert(id, handle);
 			Ok(Some(id))
 		} else {
-			Err(Error::new(EACCES))
+			Err(Error::new(ErrorKind::PermissionDenied))
 		}
 	}
 
 	fn read(&mut self, id: usize, buf: &mut [u8]) -> Result<Option<usize>> {
         let mut handles = self.handles.lock();
-        match *handles.get_mut(&id).ok_or(Error::new(EBADF))? {
+        match *handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other))? {
 			Handle::StrBuf(ref strbuf, ref mut size) => {
 				let mut i = 0;
 				while i < buf.len() && *size < strbuf.len() {
@@ -947,16 +948,16 @@ impl TODO for IntelHDA {
 				}
 				Ok(Some(i))
 			},
-			_ => Err(Error::new(EBADF)),
+			_ => Err(Error::new(ErrorKind::Other)),
 		}
 	}
 
 	fn write(&mut self, id: usize, buf: &[u8]) -> Result<Option<usize>> {
 		let index = {
 	        let mut handles = self.handles.lock();
-	        match handles.get_mut(&id).ok_or(Error::new(EBADF))? {
+	        match handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other))? {
 				Handle::Todo => 0,
-				_ => return Err(Error::new(EBADF)),
+				_ => return Err(Error::new(ErrorKind::Other)),
 			}
 		};
 
@@ -968,25 +969,25 @@ impl TODO for IntelHDA {
 	fn seek(&mut self, id: usize, pos: isize, whence: usize) -> Result<Option<isize>> {
 	    let pos = pos as usize;
 		let mut handles = self.handles.lock();
-		match *handles.get_mut(&id).ok_or(Error::new(EBADF))? {
+		match *handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other))? {
 			Handle::StrBuf(ref mut strbuf, ref mut size) => {
 				let len = strbuf.len() as usize;
 				*size = match whence {
 					SEEK_SET => cmp::min(len, pos),
 					SEEK_CUR => cmp::max(0, cmp::min(len as isize, *size as isize + pos as isize)) as usize,
 					SEEK_END => cmp::max(0, cmp::min(len as isize,   len as isize + pos as isize)) as usize,
-					_ => return Err(Error::new(EINVAL))
+					_ => return Err(Error::new(ErrorKind::InvalidInput))
 				};
 				Ok(Some(*size as isize))
 			},
 
-			_ => Err(Error::new(EINVAL)),
+			_ => Err(Error::new(ErrorKind::InvalidInput)),
         }
 	}
 
     fn fpath(&mut self, id: usize, buf: &mut [u8]) -> Result<Option<usize>> {
         let mut handles = self.handles.lock();
-        let _handle = handles.get_mut(&id).ok_or(Error::new(EBADF))?;
+        let _handle = handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other))?;
 
         let mut i = 0;
         let scheme_path = b"audiohw:";
@@ -999,6 +1000,6 @@ impl TODO for IntelHDA {
 
 	fn close(&mut self, id: usize) -> Result<Option<usize>> {
 		let mut handles = self.handles.lock();
-    	handles.remove(&id).ok_or(Error::new(EBADF)).and(Ok(Some(0)))
+    	handles.remove(&id).ok_or(Error::new(ErrorKind::Other)).and(Ok(Some(0)))
 	}
 }
