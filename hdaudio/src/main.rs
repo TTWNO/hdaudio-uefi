@@ -1,7 +1,11 @@
 mod hda;
 
-fn main() {
-  
+use std::error::Error;
+use std::process::ExitCode;
+
+fn main() -> Result<ExitCode, Box<dyn Error>> {
+  println!("Opening Intel HDA"); 
+  Ok(ExitCode::SUCCESS)
 }
 
 ////#![deny(warnings)]
