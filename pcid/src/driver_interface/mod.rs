@@ -210,8 +210,8 @@ pub enum PcidClientResponse {
 // are stored in the same buffer as the actual data).
 /// A handle from a `pcid` client (e.g. `ahcid`) to `pcid`.
 pub struct PcidServerHandle<T: Serialize + for<'a> Deserialize<'a>> {
-    pcid_to_client: SyncSender<T>,
-    pcid_from_client: Receiver<T>,
+    pcid_to_client: Receiver<T>,
+    pcid_from_client: SyncSender<T>,
 }
 
 pub(crate) fn send<W: Write, T: Serialize>(w: &mut W, message: &T) -> Result<()> {
@@ -236,7 +236,7 @@ pub(crate) fn recv<R: Read, T: DeserializeOwned>(r: &mut R) -> Result<T> {
 }
 
 impl<T: Serialize + for<'a> Deserialize<'a>> PcidServerHandle<T> {
-    pub fn connect(pcid_to_client: SyncSender<T>, pcid_from_client: Receiver<T>) -> Result<Self> {
+    pub fn connect(pcid_to_client: Receiver<T>, pcid_from_client: SyncSender<T>) -> Result<Self> {
         Ok(Self {
             pcid_to_client,
             pcid_from_client,
