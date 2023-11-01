@@ -1,8 +1,7 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::{env, io};
-
-use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
+use std::path::Path;
 
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use thiserror::Error;
@@ -209,9 +208,9 @@ pub enum PcidClientResponse {
 // very similar to crossbeam-channel or libstd's mpsc (except the cycle, enqueue and dequeue fields
 // are stored in the same buffer as the actual data).
 /// A handle from a `pcid` client (e.g. `ahcid`) to `pcid`.
-pub struct PcidServerHandle<T: Serialize + for<'a> Deserialize<'a>> {
-    pcid_to_client: Receiver<T>,
-    pcid_from_client: SyncSender<T>,
+pub struct PcidServerHandle {
+    pcid_to_client: File,
+    pcid_from_client: File,
 }
 
 pub(crate) fn send<W: Write, T: Serialize>(w: &mut W, message: &T) -> Result<()> {
@@ -235,16 +234,16 @@ pub(crate) fn recv<R: Read, T: DeserializeOwned>(r: &mut R) -> Result<T> {
     Ok(bincode::deserialize_from(&data[..])?)
 }
 
-impl<T: Serialize + for<'a> Deserialize<'a>> PcidServerHandle<T> {
-    pub fn connect(pcid_to_client: Receiver<T>, pcid_from_client: SyncSender<T>) -> Result<Self> {
+impl PcidServerHandle {
+    pub fn connect(pcid_to_client: File, pcid_from_client: File) -> Result<Self> {
         Ok(Self {
             pcid_to_client,
             pcid_from_client,
         })
     }
     pub fn connect_default() -> Result<Self> {
-        let pcid_to_client_fd = env::var("PCID_TO_CLIENT_FD")?.parse::<RawFd>().map_err(PcidClientHandleError::EnvValidityError)?;
-        let pcid_from_client_fd = env::var("PCID_FROM_CLIENT_FD")?.parse::<RawFd>().map_err(PcidClientHandleError::EnvValidityError)?;
+        let pcid_to_client_fd = File::create(Path::new(":PCI_TO"))?;
+        let pcid_from_client_fd = File::create(Path::new(":PCI_FROM"))?;
 
         Self::connect(pcid_to_client_fd, pcid_from_client_fd)
     }
