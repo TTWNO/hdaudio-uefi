@@ -2,9 +2,132 @@ mod hda;
 
 use std::error::Error;
 use std::process::ExitCode;
+use std::convert::TryFrom;
+use std::fs::File;
+use std::cell::RefCell;
+use std::sync::Arc;
+use pcid_interface::PciFeature;
+use pcid_interface::SetFeatureInfo;
+use pcid_interface::MsiSetFeatureInfo;
+use pcid_interface::irq_helpers::allocate_single_interrupt_vector;
+use pcid_interface::irq_helpers::read_bsp_apic_id;
+use pcid_interface::PciFeatureInfo;
+use pcid_interface::PcidServerHandle;
+
+#[cfg(not(target_arch = "x85_64"))]
+fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
+    let pci_config = pcid_handle.fetch_config().expect("ihdad: failed to fetch config");
+    let irq = pci_config.func.legacy_interrupt_line;
+
+    if pci_config.func.legacy_interrupt_pin.is_some() {
+        // legacy INTx# interrupt pins.
+        Some(File::open(format!("irq:{}", irq)).expect("ihdad: failed to open legacy IRQ file"))
+    } else {
+        // no interrupts at all
+        None
+    }
+}
+
+#[cfg(target_arch = "x85_64")]
+fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
+    let pci_config = pcid_handle.fetch_config().expect("ihdad: failed to fetch config");
+
+    let irq = pci_config.func.legacy_interrupt_line;
+
+    let all_pci_features = pcid_handle.fetch_all_features().expect("ihdad: failed to fetch pci features");
+    log::debug!("PCI FEATURES: {:?}", all_pci_features);
+
+    let (has_msi, mut msi_enabled) = all_pci_features.iter().map(|(feature, status)| (feature.is_msi(), status.is_enabled())).find(|&(f, _)| f).unwrap_or((false, false));
+    let (has_msix, mut msix_enabled) = all_pci_features.iter().map(|(feature, status)| (feature.is_msix(), status.is_enabled())).find(|&(f, _)| f).unwrap_or((false, false));
+
+    if has_msi && !msi_enabled && !has_msix {
+        msi_enabled = true;
+    }
+    if has_msix && !msix_enabled {
+        msix_enabled = true;
+    }
+
+    if msi_enabled && !msix_enabled {
+        use pcid_interface::msi::x86_64::{DeliveryMode, self as x86_64_msix};
+
+        let capability = match pcid_handle.feature_info(PciFeature::Msi).expect("ihdad: failed to retrieve the MSI capability structure from pcid") {
+            PciFeatureInfo::Msi(s) => s,
+            PciFeatureInfo::MsiX(_) => panic!(),
+        };
+        // TODO: Allow allocation of up to 32 vectors.
+
+        // TODO: Find a way to abstract this away, potantially as a helper module for
+        // pcid_interface, so that this can be shared between nvmed, xhcid, ixgebd, etc..
+
+        let destination_id = read_bsp_apic_id().expect("ihdad: failed to read BSP apic id");
+        let lapic_id = u8::try_from(destination_id).expect("CPU id didn't fit inside u8");
+        let msg_addr = x86_64_msix::message_address(lapic_id, false, false);
+
+        let (vector, interrupt_handle) = allocate_single_interrupt_vector(destination_id).expect("ihdad: failed to allocate interrupt vector").expect("ihdad: no interrupt vectors left");
+        let msg_data = x86_64_msix::message_data_edge_triggered(DeliveryMode::Fixed, vector);
+
+        let set_feature_info = MsiSetFeatureInfo {
+            multi_message_enable: Some(0),
+            message_address: Some(msg_addr),
+            message_upper_address: Some(0),
+            message_data: Some(msg_data as u16),
+            mask_bits: None,
+        };
+        pcid_handle.set_feature_info(SetFeatureInfo::Msi(set_feature_info)).expect("ihdad: failed to set feature info");
+
+        pcid_handle.enable_feature(PciFeature::Msi).expect("ihdad: failed to enable MSI");
+        log::debug!("Enabled MSI");
+
+        Some(interrupt_handle)
+    } else if pci_config.func.legacy_interrupt_pin.is_some() {
+        log::debug!("Legacy IRQ {}", irq);
+
+        // legacy INTx# interrupt pins.
+        Some(File::open(format!("irq:{}", irq)).expect("ihdad: failed to open legacy IRQ file"))
+    } else {
+        // no interrupts at all
+        None
+    }
+}
 
 fn main() -> Result<ExitCode, Box<dyn Error>> {
-  println!("Opening Intel HDA"); 
+  log::debug!("Opening Intel HDA"); 
+  let mut pcid_handle = PcidServerHandle::connect_default().expect("ihdad: failed to setup channel to pcid");
+
+  let pci_config = pcid_handle.fetch_config().expect("ihdad: failed to fetch config");
+
+  let mut name = pci_config.func.name();
+  name.push_str("_ihda");
+
+  let bar = pci_config.func.bars[0];
+  let bar_size = pci_config.func.bar_sizes[0];
+  let bar_ptr = match bar {
+      pcid_interface::PciBar::Memory32(ptr) => match ptr {
+          0 => panic!("BAR 0 is mapped to address 0"),
+          _ => ptr as u64,
+      },
+      pcid_interface::PciBar::Memory64(ptr) => match ptr {
+          0 => panic!("BAR 0 is mapped to address 0"),
+          _ => ptr,
+      },
+      other => panic!("Expected memory bar, found {}", other),
+  };
+
+  log::info!(" + IHDA {} on: {:#X} size: {}", name, bar_ptr, bar_size);
+
+let address = unsafe {
+	common::physmap(bar_ptr as usize, bar_size as usize, common::Prot::RW, common::MemoryType::Uncacheable)
+		.expect("ihdad: failed to map address") as usize
+};
+
+  //TODO: MSI-X
+  let mut irq_file = get_int_method(&mut pcid_handle).expect("ihdad: no interrupt file");
+
+	let vend_prod:u32 = ((pci_config.func.venid as u32) << 16) | (pci_config.func.devid as u32);
+
+	let device = Arc::new(RefCell::new(unsafe { hda::IntelHDA::new(address, vend_prod).expect("ihdad: failed to allocate device") }));
+  device.borrow_mut().beep(20);
+  
   Ok(ExitCode::SUCCESS)
 }
 
@@ -38,169 +161,7 @@ fn main() -> Result<ExitCode, Box<dyn Error>> {
 //    82801H ICH8  8086:284B
 //*/
 //
-//fn setup_logging() -> Option<&'static RedoxLogger> {
-//    let mut logger = RedoxLogger::new()
-//        .with_output(
-//            OutputBuilder::stderr()
-//                .with_filter(log::LevelFilter::Info) // limit global output to important info
-//                .with_ansi_escape_codes()
-//                .flush_on_newline(true)
-//                .build()
-//        );
-//
-//    #[cfg(target_os = "redox")]
-//    match OutputBuilder::in_redox_logging_scheme("audio", "pcie", "ihda.log") {
-//        Ok(b) => logger = logger.with_output(
-//            // TODO: Add a configuration file for this
-//            b.with_filter(log::LevelFilter::Info)
-//                .flush_on_newline(true)
-//                .build()
-//        ),
-//        Err(error) => eprintln!("ihdad: failed to create ihda.log: {}", error),
-//    }
-//
-//    #[cfg(target_os = "redox")]
-//    match OutputBuilder::in_redox_logging_scheme("audio", "pcie", "ihda.ansi.log") {
-//        Ok(b) => logger = logger.with_output(
-//            b.with_filter(log::LevelFilter::Info)
-//                .with_ansi_escape_codes()
-//                .flush_on_newline(true)
-//                .build()
-//        ),
-//        Err(error) => eprintln!("ihdad: failed to create ihda.ansi.log: {}", error),
-//    }
-//
-//    match logger.enable() {
-//        Ok(logger_ref) => {
-//            eprintln!("ihdad: enabled logger");
-//            Some(logger_ref)
-//        }
-//        Err(error) => {
-//            eprintln!("ihdad: failed to set default logger: {}", error);
-//            None
-//        }
-//    }
-//}
-//
-//#[cfg(target_arch = "x86_64")]
-//fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
-//    let pci_config = pcid_handle.fetch_config().expect("ihdad: failed to fetch config");
-//
-//    let irq = pci_config.func.legacy_interrupt_line;
-//
-//    let all_pci_features = pcid_handle.fetch_all_features().expect("ihdad: failed to fetch pci features");
-//    log::debug!("PCI FEATURES: {:?}", all_pci_features);
-//
-//    let (has_msi, mut msi_enabled) = all_pci_features.iter().map(|(feature, status)| (feature.is_msi(), status.is_enabled())).find(|&(f, _)| f).unwrap_or((false, false));
-//    let (has_msix, mut msix_enabled) = all_pci_features.iter().map(|(feature, status)| (feature.is_msix(), status.is_enabled())).find(|&(f, _)| f).unwrap_or((false, false));
-//
-//    if has_msi && !msi_enabled && !has_msix {
-//        msi_enabled = true;
-//    }
-//    if has_msix && !msix_enabled {
-//        msix_enabled = true;
-//    }
-//
-//    if msi_enabled && !msix_enabled {
-//        use pcid_interface::msi::x86_64::{DeliveryMode, self as x86_64_msix};
-//
-//        let capability = match pcid_handle.feature_info(PciFeature::Msi).expect("ihdad: failed to retrieve the MSI capability structure from pcid") {
-//            PciFeatureInfo::Msi(s) => s,
-//            PciFeatureInfo::MsiX(_) => panic!(),
-//        };
-//        // TODO: Allow allocation of up to 32 vectors.
-//
-//        // TODO: Find a way to abstract this away, potantially as a helper module for
-//        // pcid_interface, so that this can be shared between nvmed, xhcid, ixgebd, etc..
-//
-//        let destination_id = read_bsp_apic_id().expect("ihdad: failed to read BSP apic id");
-//        let lapic_id = u8::try_from(destination_id).expect("CPU id didn't fit inside u8");
-//        let msg_addr = x86_64_msix::message_address(lapic_id, false, false);
-//
-//        let (vector, interrupt_handle) = allocate_single_interrupt_vector(destination_id).expect("ihdad: failed to allocate interrupt vector").expect("ihdad: no interrupt vectors left");
-//        let msg_data = x86_64_msix::message_data_edge_triggered(DeliveryMode::Fixed, vector);
-//
-//        let set_feature_info = MsiSetFeatureInfo {
-//            multi_message_enable: Some(0),
-//            message_address: Some(msg_addr),
-//            message_upper_address: Some(0),
-//            message_data: Some(msg_data as u16),
-//            mask_bits: None,
-//        };
-//        pcid_handle.set_feature_info(SetFeatureInfo::Msi(set_feature_info)).expect("ihdad: failed to set feature info");
-//
-//        pcid_handle.enable_feature(PciFeature::Msi).expect("ihdad: failed to enable MSI");
-//        log::debug!("Enabled MSI");
-//
-//        Some(interrupt_handle)
-//    } else if pci_config.func.legacy_interrupt_pin.is_some() {
-//        log::debug!("Legacy IRQ {}", irq);
-//
-//        // legacy INTx# interrupt pins.
-//        Some(File::open(format!("irq:{}", irq)).expect("ihdad: failed to open legacy IRQ file"))
-//    } else {
-//        // no interrupts at all
-//        None
-//    }
-//}
-//
-////TODO: MSI on non-x86_64?
-//#[cfg(not(target_arch = "x86_64"))]
-//fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
-//    let pci_config = pcid_handle.fetch_config().expect("ihdad: failed to fetch config");
-//    let irq = pci_config.func.legacy_interrupt_line;
-//
-//    if pci_config.func.legacy_interrupt_pin.is_some() {
-//        // legacy INTx# interrupt pins.
-//        Some(File::open(format!("irq:{}", irq)).expect("ihdad: failed to open legacy IRQ file"))
-//    } else {
-//        // no interrupts at all
-//        None
-//    }
-//}
-//
 //fn daemon(daemon: redox_daemon::Daemon) -> ! {
-//    let _logger_ref = setup_logging();
-//
-//    let mut pcid_handle = PcidServerHandle::connect_default().expect("ihdad: failed to setup channel to pcid");
-//
-//    let pci_config = pcid_handle.fetch_config().expect("ihdad: failed to fetch config");
-//
-//    let mut name = pci_config.func.name();
-//    name.push_str("_ihda");
-//
-//    let bar = pci_config.func.bars[0];
-//    let bar_size = pci_config.func.bar_sizes[0];
-//    let bar_ptr = match bar {
-//        pcid_interface::PciBar::Memory32(ptr) => match ptr {
-//            0 => panic!("BAR 0 is mapped to address 0"),
-//            _ => ptr as u64,
-//        },
-//        pcid_interface::PciBar::Memory64(ptr) => match ptr {
-//            0 => panic!("BAR 0 is mapped to address 0"),
-//            _ => ptr,
-//        },
-//        other => panic!("Expected memory bar, found {}", other),
-//    };
-//
-//    log::info!(" + IHDA {} on: {:#X} size: {}", name, bar_ptr, bar_size);
-//
-//	let address = unsafe {
-//		common::physmap(bar_ptr as usize, bar_size as usize, common::Prot::RW, common::MemoryType::Uncacheable)
-//			.expect("ihdad: failed to map address") as usize
-//	};
-//
-//    //TODO: MSI-X
-//    let mut irq_file = get_int_method(&mut pcid_handle).expect("ihdad: no interrupt file");
-//
-//	{
-//		let vend_prod:u32 = ((pci_config.func.venid as u32) << 16) | (pci_config.func.devid as u32);
-//
-//		let device = Arc::new(RefCell::new(unsafe { hda::IntelHDA::new(address, vend_prod).expect("ihdad: failed to allocate device") }));
-//		let socket_fd = syscall::open(":audiohw", syscall::O_RDWR | syscall::O_CREAT | syscall::O_NONBLOCK).expect("ihdad: failed to create hda scheme");
-//		let socket = Arc::new(RefCell::new(unsafe { File::from_raw_fd(socket_fd as RawFd) }));
-//		daemon.ready().expect("ihdad: failed to signal readiness");
-//
 //		let mut event_queue = EventQueue::<usize>::new().expect("ihdad: Could not create event queue.");
 //
 //        syscall::setrens(0, 0).expect("ihdad: failed to enter null namespace");
