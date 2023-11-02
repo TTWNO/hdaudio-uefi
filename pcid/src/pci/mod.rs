@@ -50,7 +50,7 @@ impl Pci {
     fn set_iopl() {
         // make sure that pcid is not granted io port permission unless pcie memory-mapped
         // configuration space is not available.
-        info!("PCI: couldn't find or access PCIe extended configuration, and thus falling back to PCI 3.0 io ports");
+        println!("PCI: couldn't find or access PCIe extended configuration, and thus falling back to PCI 3.0 io ports");
         unsafe { syscall::iopl(3).expect("pcid: failed to set iopl to 3"); }
     }
     fn address(bus: u8, dev: u8, func: u8, offset: u8) -> u32 {
