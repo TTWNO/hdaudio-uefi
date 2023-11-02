@@ -230,7 +230,7 @@ pub struct PcidServerHandle {
     pcid_from_client: Arc<Mutex<Vec<u8>>>,
 }
 
-pub(crate) fn send<W: Write + ?Sized, T: Serialize>(w: &mut W, message: &T) -> Result<()> {
+pub fn send<W: Write + ?Sized, T: Serialize>(w: &mut W, message: &T) -> Result<()> {
     println!("send...");
     let mut data = Vec::new();
     bincode::serialize_into(&mut data, message)?;
@@ -243,7 +243,7 @@ pub(crate) fn send<W: Write + ?Sized, T: Serialize>(w: &mut W, message: &T) -> R
     println!("written");
     Ok(())
 }
-pub(crate) fn recv<R: Read + ?Sized, T: DeserializeOwned>(r: &mut R) -> Result<T> {
+pub fn recv<R: Read + ?Sized, T: DeserializeOwned>(r: &mut R) -> Result<T> {
     println!("recv...");
     let mut length_bytes = [0u8; 8];
     r.read_exact(&mut length_bytes)?;
