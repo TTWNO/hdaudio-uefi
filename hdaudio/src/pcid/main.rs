@@ -728,6 +728,7 @@ fn main() {
                 let func_num = func.num;
                 match PciHeader::from_reader(func) {
                     Ok(header) => {
+                        println!("HEADER: {:?}", header);
                         handle_parsed_header(
                             Arc::clone(&state),
                             &config,

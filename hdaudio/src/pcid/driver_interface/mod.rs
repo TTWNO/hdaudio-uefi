@@ -3,7 +3,7 @@ use std::io::Bytes;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
-use crossbeam::channel::{Sender, Receiver, bounded, SendError, RecvError};
+use crossbeam::channel::{Sender, Receiver, bounded, SendError, RecvError, TryRecvError};
 use std::{env, io};
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -14,6 +14,7 @@ pub use crate::pci::msi;
 pub use crate::pci::{PciBar, PciHeader};
 
 pub mod irq_helpers;
+pub mod state;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[repr(u8)]
@@ -144,6 +145,9 @@ pub enum PcidClientHandleError {
 
     #[error("unable to recv data: {0}")]
     RecvError(#[from] RecvError),
+
+    #[error("unable to recv data: {0}")]
+    TryRecvError(#[from] TryRecvError),
 }
 pub type Result<T, E = PcidClientHandleError> = std::result::Result<T, E>;
 
@@ -233,43 +237,52 @@ pub enum PcidClientResponse {
 // are stored in the same buffer as the actual data).
 /// A handle from a `pcid` client (e.g. `ahcid`) to `pcid`.
 pub struct PcidServerHandle {
-    pcid_to_client: Sender<Vec<u8>>,
-    pcid_from_client: Receiver<Vec<u8>>,
+    pcid_to_client_write: Sender<Vec<u8>>,
+    pcid_to_client_read: Receiver<Vec<u8>>,
+    pcid_from_client_write: Sender<Vec<u8>>,
+    pcid_from_client_read: Receiver<Vec<u8>>,
+    drivers: Vec<(Mutex<crate::DriverHandler>, SubdriverArguments)>,
 }
 
 pub fn send<T: Serialize>(w: &mut Sender<Vec<u8>>, message: &T) -> Result<()> {
-    println!("send...");
     let mut data = Vec::new();
     bincode::serialize_into(&mut data, message)?;
-    println!("...serialized ({})...", data.len());
     match w.send(data) {
-      Ok(()) => println!("SEND OK"),
+      Ok(()) => println!("Send OK"),
       Err(e) => {
-        println!("SEND ERR");
+        println!("Send ERR");
         return Err(PcidClientHandleError::SendError(e));
       },
     };
-    println!("written");
     Ok(())
 }
 pub fn recv<T: DeserializeOwned>(r: &mut Receiver<Vec<u8>>) -> Result<T> {
-    println!("recv...");
-    let data = r.recv()?;
-    println!("{:?}", data);
+    let data = match r.try_recv() {
+      Ok(data) => data,
+      Err(e) => {
+        println!("RECV ERR: {:?}", e);
+        return Err(e.into());
+      }
+    };
 
     let b = bincode::deserialize_from(&data[..])?;
-    println!("done");
     Ok(b)
 }
 
 impl PcidServerHandle {
     pub fn connect(
-        pcid_to_client: Sender<Vec<u8>>,
-        pcid_from_client: Receiver<Vec<u8>>,
+        pcid_to_client_write: Sender<Vec<u8>>,
+        pcid_to_client_read: Receiver<Vec<u8>>,
+        pcid_from_client_write: Sender<Vec<u8>>,
+        pcid_from_client_read: Receiver<Vec<u8>>,
+        drivers: Vec<(crate::DriverHandler, SubdriverArguments)>,
     ) -> Result<Self> {
         Ok(Self {
-            pcid_to_client,
-            pcid_from_client,
+            pcid_to_client_write,
+            pcid_to_client_read,
+            pcid_from_client_write,
+            pcid_from_client_read,
+            drivers: drivers.into_iter().map(|(d,s)| (Mutex::new(d), s)).collect(),
         })
     }
     /*
@@ -282,15 +295,19 @@ impl PcidServerHandle {
     }
     */
     pub(crate) fn send(&mut self, req: &PcidClientRequest) -> Result<()> {
-        send(&mut self.pcid_to_client, req)
+        let s = send(&mut self.pcid_to_client_write, req);
+        for (mtx_driver,args) in &self.drivers {
+          let mut driver = mtx_driver.lock().unwrap();
+          driver.try_handle_event(&mut self.pcid_from_client_write, &mut self.pcid_to_client_read, args.clone());
+        }
+        s
     }
     pub(crate) fn recv(&mut self) -> Result<PcidClientResponse> {
-        recv(&mut self.pcid_from_client)
+        let r = recv(&mut self.pcid_from_client_read);
+        r
     }
     pub fn fetch_config(&mut self) -> Result<SubdriverArguments> {
-        println!("Try to send");
         self.send(&PcidClientRequest::RequestConfig)?;
-        println!("sent");
         match self.recv()? {
             PcidClientResponse::Config(a) => Ok(a),
             other => Err(PcidClientHandleError::InvalidResponse(other)),
