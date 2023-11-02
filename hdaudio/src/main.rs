@@ -1,5 +1,6 @@
 mod hda;
 
+use syscall::iopl;
 use std::error::Error;
 use std::process::ExitCode;
 use std::convert::TryFrom;
@@ -35,7 +36,7 @@ fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
     let irq = pci_config.func.legacy_interrupt_line;
 
     let all_pci_features = pcid_handle.fetch_all_features().expect("ihdad: failed to fetch pci features");
-    log::debug!("PCI FEATURES: {:?}", all_pci_features);
+    println!("PCI FEATURES: {:?}", all_pci_features);
 
     let (has_msi, mut msi_enabled) = all_pci_features.iter().map(|(feature, status)| (feature.is_msi(), status.is_enabled())).find(|&(f, _)| f).unwrap_or((false, false));
     let (has_msix, mut msix_enabled) = all_pci_features.iter().map(|(feature, status)| (feature.is_msix(), status.is_enabled())).find(|&(f, _)| f).unwrap_or((false, false));
@@ -76,11 +77,11 @@ fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
         pcid_handle.set_feature_info(SetFeatureInfo::Msi(set_feature_info)).expect("ihdad: failed to set feature info");
 
         pcid_handle.enable_feature(PciFeature::Msi).expect("ihdad: failed to enable MSI");
-        log::debug!("Enabled MSI");
+        println!("Enabled MSI");
 
         Some(interrupt_handle)
     } else if pci_config.func.legacy_interrupt_pin.is_some() {
-        log::debug!("Legacy IRQ {}", irq);
+        println!("Legacy IRQ {}", irq);
 
         // legacy INTx# interrupt pins.
         Some(File::open(format!("irq:{}", irq)).expect("ihdad: failed to open legacy IRQ file"))
@@ -91,13 +92,16 @@ fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
 }
 
 fn main() -> Result<ExitCode, Box<dyn Error>> {
-  log::debug!("Opening Intel HDA"); 
+  println!("Opening Intel HDA"); 
   let mut pcid_handle = PcidServerHandle::connect_default().expect("ihdad: failed to setup channel to pcid");
+  println!("Setup PCID Handle"); 
 
   let pci_config = pcid_handle.fetch_config().expect("ihdad: failed to fetch config");
+  println!("Setup PCI Config"); 
 
   let mut name = pci_config.func.name();
   name.push_str("_ihda");
+  println!("Name added _ihda"); 
 
   let bar = pci_config.func.bars[0];
   let bar_size = pci_config.func.bar_sizes[0];
@@ -112,8 +116,9 @@ fn main() -> Result<ExitCode, Box<dyn Error>> {
       },
       other => panic!("Expected memory bar, found {}", other),
   };
+  println!("Set up bar!"); 
 
-  log::info!(" + IHDA {} on: {:#X} size: {}", name, bar_ptr, bar_size);
+  println!(" + IHDA {} on: {:#X} size: {}", name, bar_ptr, bar_size);
 
 let address = unsafe {
 	common::physmap(bar_ptr as usize, bar_size as usize, common::Prot::RW, common::MemoryType::Uncacheable)
