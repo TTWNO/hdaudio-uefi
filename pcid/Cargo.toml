@@ -29,3 +29,4 @@ thiserror = "1"
 toml = "0.5"
 
 common = { path = "../common" }
+lazy_static = "1.4.0"

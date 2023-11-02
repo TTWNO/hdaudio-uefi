@@ -359,8 +359,10 @@ impl State {
     }
 }
 
-static FROM_CLIENT: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
-static TO_CLIENT: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+lazy_static::lazy_static! {
+  static ref FROM_CLIENT: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+  static ref TO_CLIENT: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+}
 
 fn handle_parsed_header(
     state: Arc<State>,
@@ -657,7 +659,9 @@ fn handle_parsed_header(
                 // I'd be interested on adding development to this platform in the future
                 // maybe get atspi going? with help from the main developer? (remember he is in the Odilia channel)
 
-                match command.envs(envs).spawn() {
+                // try to hook into spawning a separate function but not a separate command
+
+                match command.spawn() {
                     Ok(mut child) => {
                         let driver_handler = DriverHandler {
                             bus_num,
