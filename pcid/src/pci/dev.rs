@@ -2,7 +2,7 @@ use super::{PciBus, PciFunc};
 
 pub struct PciDev<'pci> {
     pub bus: &'pci PciBus<'pci>,
-    pub num: u8
+    pub num: u8,
 }
 
 impl<'pci> PciDev<'pci> {
@@ -20,15 +20,12 @@ impl<'pci> PciDev<'pci> {
 
 pub struct PciDevIter<'pci> {
     dev: &'pci PciDev<'pci>,
-    num: u8
+    num: u8,
 }
 
 impl<'pci> PciDevIter<'pci> {
     pub fn new(dev: &'pci PciDev<'pci>) -> Self {
-        PciDevIter {
-            dev: dev,
-            num: 0
-        }
+        PciDevIter { dev: dev, num: 0 }
     }
 }
 
@@ -39,11 +36,11 @@ impl<'pci> Iterator for PciDevIter<'pci> {
             func_num if func_num < 8 => {
                 let func = PciFunc {
                     dev: self.dev,
-                    num: self.num
+                    num: self.num,
                 };
                 self.num += 1;
                 Some(func)
-            },
+            }
             _ => None,
         }
     }

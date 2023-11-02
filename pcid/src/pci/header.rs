@@ -1,15 +1,15 @@
 use bitflags::bitflags;
-use byteorder::{LittleEndian, ByteOrder};
-use serde::{Serialize, Deserialize};
+use byteorder::{ByteOrder, LittleEndian};
+use serde::{Deserialize, Serialize};
 
-use super::func::ConfigReader;
-use super::class::PciClass;
 use super::bar::PciBar;
+use super::class::PciClass;
+use super::func::ConfigReader;
 
 #[derive(Debug, PartialEq)]
 pub enum PciHeaderError {
     NoDevice,
-    UnknownHeaderType(u8)
+    UnknownHeaderType(u8),
 }
 
 bitflags! {
@@ -53,7 +53,7 @@ pub enum PciHeader {
         interrupt_line: u8,
         interrupt_pin: u8,
         min_grant: u8,
-        max_latency: u8
+        max_latency: u8,
     },
     PciToPci {
         vendor_id: u16,
@@ -87,9 +87,9 @@ pub enum PciHeader {
         cap_pointer: u8,
         expansion_rom: u32,
         interrupt_line: u8,
-        interrupt_pin : u8,
-        bridge_control: u16
-    }
+        interrupt_pin: u8,
+        bridge_control: u16,
+    },
 }
 
 impl PciHeader {
@@ -111,7 +111,7 @@ impl PciHeader {
                     addr |= (LittleEndian::read_u32(high_bytes) as u64) << 32;
                     bars[i] = PciBar::Memory64(addr);
                     i += 2;
-                },
+                }
                 bar => {
                     bars[i] = bar;
                     i += 1;
@@ -153,13 +153,30 @@ impl PciHeader {
                     let min_grant = bytes[46];
                     let max_latency = bytes[47];
                     Ok(PciHeader::General {
-                        vendor_id, device_id, command, status, revision, interface,
-                        subclass, class, cache_line_size, latency_timer, header_type,
-                        bist, bars, cardbus_cis_ptr, subsystem_vendor_id, subsystem_id,
-                        expansion_rom_bar, cap_pointer, interrupt_line, interrupt_pin,
-                        min_grant, max_latency
+                        vendor_id,
+                        device_id,
+                        command,
+                        status,
+                        revision,
+                        interface,
+                        subclass,
+                        class,
+                        cache_line_size,
+                        latency_timer,
+                        header_type,
+                        bist,
+                        bars,
+                        cardbus_cis_ptr,
+                        subsystem_vendor_id,
+                        subsystem_id,
+                        expansion_rom_bar,
+                        cap_pointer,
+                        interrupt_line,
+                        interrupt_pin,
+                        min_grant,
+                        max_latency,
                     })
-                },
+                }
                 PciHeaderType::PCITOPCI => {
                     let bytes = unsafe { reader.read_range(16, 48) };
                     let mut bars = [PciBar::None; 2];
@@ -185,17 +202,42 @@ impl PciHeader {
                     let interrupt_pin = bytes[45];
                     let bridge_control = LittleEndian::read_u16(&bytes[46..48]);
                     Ok(PciHeader::PciToPci {
-                        vendor_id, device_id, command, status, revision, interface,
-                        subclass, class, cache_line_size, latency_timer, header_type,
-                        bist, bars, primary_bus_num, secondary_bus_num, subordinate_bus_num,
-                        secondary_latency_timer, io_base, io_limit, secondary_status,
-                        mem_base, mem_limit, prefetch_base, prefetch_limit, prefetch_base_upper,
-                        prefetch_limit_upper, io_base_upper, io_limit_upper, cap_pointer,
-                        expansion_rom, interrupt_line, interrupt_pin, bridge_control
+                        vendor_id,
+                        device_id,
+                        command,
+                        status,
+                        revision,
+                        interface,
+                        subclass,
+                        class,
+                        cache_line_size,
+                        latency_timer,
+                        header_type,
+                        bist,
+                        bars,
+                        primary_bus_num,
+                        secondary_bus_num,
+                        subordinate_bus_num,
+                        secondary_latency_timer,
+                        io_base,
+                        io_limit,
+                        secondary_status,
+                        mem_base,
+                        mem_limit,
+                        prefetch_base,
+                        prefetch_limit,
+                        prefetch_base_upper,
+                        prefetch_limit_upper,
+                        io_base_upper,
+                        io_limit_upper,
+                        cap_pointer,
+                        expansion_rom,
+                        interrupt_line,
+                        interrupt_pin,
+                        bridge_control,
                     })
-
-                },
-                id => Err(PciHeaderError::UnknownHeaderType(id.bits()))
+                }
+                id => Err(PciHeaderError::UnknownHeaderType(id.bits())),
             }
         } else {
             Err(PciHeaderError::NoDevice)
@@ -205,42 +247,54 @@ impl PciHeader {
     /// Return the Header Type.
     pub fn header_type(&self) -> PciHeaderType {
         match self {
-            &PciHeader::General { header_type, .. } | &PciHeader::PciToPci { header_type, .. } => header_type,
+            &PciHeader::General { header_type, .. } | &PciHeader::PciToPci { header_type, .. } => {
+                header_type
+            }
         }
     }
 
     /// Return the Vendor ID field.
     pub fn vendor_id(&self) -> u16 {
         match self {
-            &PciHeader::General { vendor_id, .. } | &PciHeader::PciToPci { vendor_id, .. } => vendor_id,
+            &PciHeader::General { vendor_id, .. } | &PciHeader::PciToPci { vendor_id, .. } => {
+                vendor_id
+            }
         }
     }
 
     /// Return the Device ID field.
     pub fn device_id(&self) -> u16 {
         match self {
-            &PciHeader::General { device_id, .. } | &PciHeader::PciToPci { device_id, .. } => device_id,
+            &PciHeader::General { device_id, .. } | &PciHeader::PciToPci { device_id, .. } => {
+                device_id
+            }
         }
     }
 
     /// Return the Revision field.
     pub fn revision(&self) -> u8 {
         match self {
-            &PciHeader::General { revision, .. } | &PciHeader::PciToPci { revision, .. } => revision,
+            &PciHeader::General { revision, .. } | &PciHeader::PciToPci { revision, .. } => {
+                revision
+            }
         }
     }
 
     /// Return the Interface field.
     pub fn interface(&self) -> u8 {
         match self {
-            &PciHeader::General { interface, .. } | &PciHeader::PciToPci { interface, .. } => interface,
+            &PciHeader::General { interface, .. } | &PciHeader::PciToPci { interface, .. } => {
+                interface
+            }
         }
     }
 
     /// Return the Subclass field.
     pub fn subclass(&self) -> u8 {
         match self {
-            &PciHeader::General { subclass, .. } | &PciHeader::PciToPci { subclass, .. } => subclass,
+            &PciHeader::General { subclass, .. } | &PciHeader::PciToPci { subclass, .. } => {
+                subclass
+            }
         }
     }
 
@@ -269,7 +323,7 @@ impl PciHeader {
             &PciHeader::General { bars, .. } => {
                 assert!(idx < 6, "the general PCI device only has 6 BARs");
                 bars[idx]
-            },
+            }
             &PciHeader::PciToPci { bars, .. } => {
                 assert!(idx < 2, "the general PCI device only has 2 BARs");
                 bars[idx]
@@ -280,8 +334,8 @@ impl PciHeader {
     /// Return the Interrupt Line field.
     pub fn interrupt_line(&self) -> u8 {
         match self {
-            &PciHeader::General { interrupt_line, .. } | &PciHeader::PciToPci { interrupt_line, .. } =>
-                interrupt_line,
+            &PciHeader::General { interrupt_line, .. }
+            | &PciHeader::PciToPci { interrupt_line, .. } => interrupt_line,
         }
     }
 
@@ -293,7 +347,9 @@ impl PciHeader {
 
     pub fn cap_pointer(&self) -> u8 {
         match self {
-            &PciHeader::General { cap_pointer, .. } | &PciHeader::PciToPci { cap_pointer, .. } => cap_pointer,
+            &PciHeader::General { cap_pointer, .. } | &PciHeader::PciToPci { cap_pointer, .. } => {
+                cap_pointer
+            }
         }
     }
 }
@@ -309,28 +365,30 @@ impl<'a> ConfigReader for &'a [u8] {
 
 #[cfg(test)]
 mod test {
-    use super::{PciHeaderError, PciHeader, PciHeaderType};
-    use super::super::func::ConfigReader;
-    use super::super::class::PciClass;
     use super::super::bar::PciBar;
+    use super::super::class::PciClass;
+    use super::super::func::ConfigReader;
+    use super::{PciHeader, PciHeaderError, PciHeaderType};
 
     const IGB_DEV_BYTES: [u8; 256] = [
-        0x86, 0x80, 0x33, 0x15, 0x07, 0x04, 0x10, 0x00, 0x03, 0x00, 0x00, 0x02, 0x10, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x50, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x01, 0xb0, 0x00, 0x00, 0x00, 0x00, 0x58, 0xf7,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xd9, 0x15, 0x33, 0x15,
-        0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x01, 0x00, 0x00,
-        0x01, 0x50, 0x23, 0xc8, 0x08, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x05, 0x70, 0x80, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x11, 0xa0, 0x04, 0x80, 0x03, 0x00, 0x00, 0x00, 0x03, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
-        0x10, 0x00, 0x02, 0x00, 0xc2, 0x8c, 0x00, 0x10, 0x0f, 0x28, 0x19, 0x00, 0x11, 0x5c, 0x42, 0x00,
-        0x42, 0x00, 0x11, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x1f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        0x86, 0x80, 0x33, 0x15, 0x07, 0x04, 0x10, 0x00, 0x03, 0x00, 0x00, 0x02, 0x10, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x50, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x01, 0xb0, 0x00, 0x00, 0x00, 0x00,
+        0x58, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xd9,
+        0x15, 0x33, 0x15, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x0a, 0x01, 0x00, 0x00, 0x01, 0x50, 0x23, 0xc8, 0x08, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x70, 0x80, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0xa0, 0x04, 0x80, 0x03, 0x00, 0x00, 0x00,
+        0x03, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0x10, 0x00, 0x02, 0x00, 0xc2,
+        0x8c, 0x00, 0x10, 0x0f, 0x28, 0x19, 0x00, 0x11, 0x5c, 0x42, 0x00, 0x42, 0x00, 0x11, 0x10,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x1f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00,
     ];
 
     #[test]
@@ -355,11 +413,11 @@ mod test {
 
     #[test]
     fn test_parse_nonexistent() {
-        let bytes = [
-            0xff, 0xff, 0xff, 0xff,
-            0xff, 0xff, 0xff, 0xff
-        ];
-        assert_eq!(PciHeader::from_reader(&bytes[..]), Err(PciHeaderError::NoDevice));
+        let bytes = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+        assert_eq!(
+            PciHeader::from_reader(&bytes[..]),
+            Err(PciHeaderError::NoDevice)
+        );
     }
 
     #[test]
@@ -369,10 +427,9 @@ mod test {
 
         let res = unsafe { (&IGB_DEV_BYTES[..]).read_range(16, 32) };
         let expected = [
-            0x00, 0x00, 0x50, 0xf7, 0x00, 0x00, 0x00, 0x00,
-            0x01, 0xb0, 0x00, 0x00, 0x00, 0x00, 0x58, 0xf7,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0xd9, 0x15, 0x33, 0x15
+            0x00, 0x00, 0x50, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x01, 0xb0, 0x00, 0x00, 0x00, 0x00,
+            0x58, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xd9, 0x15, 0x33, 0x15,
         ];
         assert_eq!(res, expected);
     }
@@ -384,7 +441,7 @@ mod test {
             fn $name() {
                 let _ = unsafe { (&IGB_DEV_BYTES[..]).read_range(0, $len) };
             }
-        }
+        };
     }
 
     read_range_should_panic!(test_short_len, 2);

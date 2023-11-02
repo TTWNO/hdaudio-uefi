@@ -1,11 +1,11 @@
 use std::io::prelude::*;
-use std::{env, io};
-use std::path::Path;
 use std::io::Bytes;
-use std::sync::Mutex;
+use std::path::Path;
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::{env, io};
 
-use serde::{Serialize, Deserialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 
 pub use crate::pci::cap::Capability;
@@ -59,7 +59,10 @@ pub struct PciFunction {
 }
 impl PciFunction {
     pub fn name(&self) -> String {
-        format!("pci-{:>02X}.{:>02X}.{:>02X}", self.bus_num, self.dev_num, self.func_num)
+        format!(
+            "pci-{:>02X}.{:>02X}.{:>02X}",
+            self.bus_num, self.dev_num, self.func_num
+        )
     }
 }
 
@@ -83,7 +86,11 @@ impl FeatureStatus {
         }
     }
     pub fn is_enabled(&self) -> bool {
-        if let &Self::Enabled = self { true } else { false }
+        if let &Self::Enabled = self {
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -94,10 +101,18 @@ pub enum PciFeature {
 }
 impl PciFeature {
     pub fn is_msi(&self) -> bool {
-        if let &Self::Msi = self { true } else { false }
+        if let &Self::Msi = self {
+            true
+        } else {
+            false
+        }
     }
     pub fn is_msix(&self) -> bool {
-        if let &Self::MsiX = self { true } else { false }
+        if let &Self::MsiX = self {
+            true
+        } else {
+            false
+        }
     }
 }
 #[derive(Debug, Serialize, Deserialize)]
@@ -237,7 +252,7 @@ pub(crate) fn recv<R: Read + ?Sized, T: DeserializeOwned>(r: &mut R) -> Result<T
     if length > 0x100_000 {
         panic!("pcid_interface: buffer too large");
     }
-    let mut data = vec! [0u8; length as usize];
+    let mut data = vec![0u8; length as usize];
     r.read_exact(&mut data)?;
     println!("reading...");
     println!("{:?}", data);
@@ -248,7 +263,10 @@ pub(crate) fn recv<R: Read + ?Sized, T: DeserializeOwned>(r: &mut R) -> Result<T
 }
 
 impl PcidServerHandle {
-    pub fn connect(pcid_to_client: Arc<Mutex<Vec<u8>>>, pcid_from_client: Arc<Mutex<Vec<u8>>>) -> Result<Self> {
+    pub fn connect(
+        pcid_to_client: Arc<Mutex<Vec<u8>>>,
+        pcid_from_client: Arc<Mutex<Vec<u8>>>,
+    ) -> Result<Self> {
         Ok(Self {
             pcid_to_client,
             pcid_from_client,

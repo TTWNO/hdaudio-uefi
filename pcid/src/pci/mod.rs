@@ -51,7 +51,9 @@ impl Pci {
         // make sure that pcid is not granted io port permission unless pcie memory-mapped
         // configuration space is not available.
         println!("PCI: couldn't find or access PCIe extended configuration, and thus falling back to PCI 3.0 io ports");
-        unsafe { syscall::iopl(3).expect("pcid: failed to set iopl to 3"); }
+        unsafe {
+            syscall::iopl(3).expect("pcid: failed to set iopl to 3");
+        }
     }
     fn address(bus: u8, dev: u8, func: u8, offset: u8) -> u32 {
         // TODO: Find the part of pcid that uses an unaligned offset!
@@ -63,7 +65,11 @@ impl Pci {
         assert_eq!(dev & 0x1F, dev, "pci device larger than 5 bits");
         assert_eq!(func & 0x7, func, "pci func larger than 3 bits");
 
-        0x80000000 | (u32::from(bus) << 16) | (u32::from(dev) << 11) | (u32::from(func) << 8) | u32::from(offset)
+        0x80000000
+            | (u32::from(bus) << 16)
+            | (u32::from(dev) << 11)
+            | (u32::from(func) << 8)
+            | u32::from(offset)
     }
 }
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -71,7 +77,8 @@ impl CfgAccess for Pci {
     unsafe fn read_nolock(&self, bus: u8, dev: u8, func: u8, offset: u16) -> u32 {
         self.iopl_once.call_once(Self::set_iopl);
 
-        let offset = u8::try_from(offset).expect("offset too large for PCI 3.0 configuration space");
+        let offset =
+            u8::try_from(offset).expect("offset too large for PCI 3.0 configuration space");
         let address = Self::address(bus, dev, func, offset);
 
         Pio::<u32>::new(0xCF8).write(address);
@@ -86,7 +93,8 @@ impl CfgAccess for Pci {
     unsafe fn write_nolock(&self, bus: u8, dev: u8, func: u8, offset: u16, value: u32) {
         self.iopl_once.call_once(Self::set_iopl);
 
-        let offset = u8::try_from(offset).expect("offset too large for PCI 3.0 configuration space");
+        let offset =
+            u8::try_from(offset).expect("offset too large for PCI 3.0 configuration space");
         let address = Self::address(bus, dev, func, offset);
 
         Pio::<u32>::new(0xCF8).write(address);
@@ -119,15 +127,12 @@ impl CfgAccess for Pci {
 
 pub struct PciIter<'pci> {
     pci: &'pci dyn CfgAccess,
-    num: Option<u8>
+    num: Option<u8>,
 }
 
 impl<'pci> PciIter<'pci> {
     pub fn new(pci: &'pci dyn CfgAccess) -> Self {
-        PciIter {
-            pci,
-            num: Some(0)
-        }
+        PciIter { pci, num: Some(0) }
     }
 }
 
@@ -138,11 +143,11 @@ impl<'pci> Iterator for PciIter<'pci> {
             Some(bus_num) => {
                 let bus = PciBus {
                     pci: self.pci,
-                    num: bus_num
+                    num: bus_num,
                 };
                 self.num = bus_num.checked_add(1);
                 Some(bus)
-            },
+            }
             None => None,
         }
     }

@@ -21,7 +21,7 @@ pub enum PciClass {
     Cryptography,
     SignalProc,
     Reserved(u8),
-    Unknown
+    Unknown,
 }
 
 impl From<u8> for PciClass {
@@ -46,7 +46,7 @@ impl From<u8> for PciClass {
             0x10 => PciClass::Cryptography,
             0x11 => PciClass::SignalProc,
             0xFF => PciClass::Unknown,
-            reserved => PciClass::Reserved(reserved)
+            reserved => PciClass::Reserved(reserved),
         }
     }
 }
@@ -73,7 +73,7 @@ impl Into<u8> for PciClass {
             PciClass::Cryptography => 0x10,
             PciClass::SignalProc => 0x11,
             PciClass::Unknown => 0xFF,
-            PciClass::Reserved(reserved) => reserved
+            PciClass::Reserved(reserved) => reserved,
         }
     }
 }

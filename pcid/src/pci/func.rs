@@ -1,4 +1,4 @@
-use byteorder::{LittleEndian, ByteOrder};
+use byteorder::{ByteOrder, LittleEndian};
 
 use super::PciDev;
 
@@ -6,11 +6,13 @@ pub trait ConfigReader {
     unsafe fn read_range(&self, offset: u16, len: u16) -> Vec<u8> {
         assert!(len > 3 && len % 4 == 0, "invalid range length: {}", len);
         let mut ret = Vec::with_capacity(len as usize);
-        let results = (offset..offset + len).step_by(4).fold(Vec::new(), |mut acc, offset| {
-            let val = self.read_u32(offset);
-            acc.push(val);
-            acc
-        });
+        let results = (offset..offset + len)
+            .step_by(4)
+            .fold(Vec::new(), |mut acc, offset| {
+                let val = self.read_u32(offset);
+                acc.push(val);
+                acc
+            });
         ret.set_len(len as usize);
         LittleEndian::write_u32_into(&*results, &mut ret);
         ret

@@ -1,15 +1,18 @@
-use std::fs::{File, metadata, read_dir};
+use std::fs::{metadata, read_dir, File};
 use std::io::prelude::*;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::{i64, thread};
 
-use log::{debug, error, info, warn, trace};
+use log::{debug, error, info, trace, warn};
 
 use crate::config::Config;
-use crate::pci::{CfgAccess, Pci, PciIter, PciBar, PciBus, PciClass, PciDev, PciFunc, PciHeader, PciHeaderError, PciHeaderType};
 use crate::pci::cap::Capability as PciCapability;
 use crate::pci::func::{ConfigReader, ConfigWriter};
+use crate::pci::{
+    CfgAccess, Pci, PciBar, PciBus, PciClass, PciDev, PciFunc, PciHeader, PciHeaderError,
+    PciHeaderType, PciIter,
+};
 use crate::pcie::Pcie;
 
 mod config;
@@ -39,11 +42,14 @@ pub struct DriverHandler {
 
     state: Arc<State>,
 }
-fn with_pci_func_raw<T, F: FnOnce(&PciFunc) -> T>(pci: &dyn CfgAccess, bus_num: u8, dev_num: u8, func_num: u8, function: F) -> T {
-    let bus = PciBus {
-        pci,
-        num: bus_num,
-    };
+fn with_pci_func_raw<T, F: FnOnce(&PciFunc) -> T>(
+    pci: &dyn CfgAccess,
+    bus_num: u8,
+    dev_num: u8,
+    func_num: u8,
+    function: F,
+) -> T {
+    let bus = PciBus { pci, num: bus_num };
     let dev = PciDev {
         bus: &bus,
         num: dev_num,
@@ -56,150 +62,279 @@ fn with_pci_func_raw<T, F: FnOnce(&PciFunc) -> T>(pci: &dyn CfgAccess, bus_num: 
 }
 impl DriverHandler {
     fn with_pci_func_raw<T, F: FnOnce(&PciFunc) -> T>(&self, function: F) -> T {
-        with_pci_func_raw(self.state.preferred_cfg_access(), self.bus_num, self.dev_num, self.func_num, function)
+        with_pci_func_raw(
+            self.state.preferred_cfg_access(),
+            self.bus_num,
+            self.dev_num,
+            self.func_num,
+            function,
+        )
     }
-    fn respond(&mut self, request: driver_interface::PcidClientRequest, args: &driver_interface::SubdriverArguments) -> driver_interface::PcidClientResponse {
-        use driver_interface::*;
+    fn respond(
+        &mut self,
+        request: driver_interface::PcidClientRequest,
+        args: &driver_interface::SubdriverArguments,
+    ) -> driver_interface::PcidClientResponse {
         use crate::pci::cap::{MsiCapability, MsixCapability};
+        use driver_interface::*;
 
         match request {
-            PcidClientRequest::RequestCapabilities => {
-                PcidClientResponse::Capabilities(self.capabilities.iter().map(|(_, capability)| capability.clone()).collect::<Vec<_>>())
-            }
-            PcidClientRequest::RequestConfig => {
-                PcidClientResponse::Config(args.clone())
-            }
-            PcidClientRequest::RequestHeader => {
-                PcidClientResponse::Header(self.header.clone())
-            }
-            PcidClientRequest::RequestFeatures => {
-                PcidClientResponse::AllFeatures(self.capabilities.iter().filter_map(|(_, capability)| match capability {
-                    PciCapability::Msi(msi) => Some((PciFeature::Msi, FeatureStatus::enabled(msi.enabled()))),
-                    PciCapability::MsiX(msix) => Some((PciFeature::MsiX, FeatureStatus::enabled(msix.msix_enabled()))),
-                    _ => None,
-                }).collect())
-            }
+            PcidClientRequest::RequestCapabilities => PcidClientResponse::Capabilities(
+                self.capabilities
+                    .iter()
+                    .map(|(_, capability)| capability.clone())
+                    .collect::<Vec<_>>(),
+            ),
+            PcidClientRequest::RequestConfig => PcidClientResponse::Config(args.clone()),
+            PcidClientRequest::RequestHeader => PcidClientResponse::Header(self.header.clone()),
+            PcidClientRequest::RequestFeatures => PcidClientResponse::AllFeatures(
+                self.capabilities
+                    .iter()
+                    .filter_map(|(_, capability)| match capability {
+                        PciCapability::Msi(msi) => {
+                            Some((PciFeature::Msi, FeatureStatus::enabled(msi.enabled())))
+                        }
+                        PciCapability::MsiX(msix) => Some((
+                            PciFeature::MsiX,
+                            FeatureStatus::enabled(msix.msix_enabled()),
+                        )),
+                        _ => None,
+                    })
+                    .collect(),
+            ),
             PcidClientRequest::EnableFeature(feature) => match feature {
                 PciFeature::Msi => {
-                    let (offset, capability): (u8, &mut MsiCapability) = match self.capabilities.iter_mut().find_map(|&mut (offset, ref mut capability)| capability.as_msi_mut().map(|cap| (offset, cap))) {
+                    let (offset, capability): (u8, &mut MsiCapability) = match self
+                        .capabilities
+                        .iter_mut()
+                        .find_map(|&mut (offset, ref mut capability)| {
+                            capability.as_msi_mut().map(|cap| (offset, cap))
+                        }) {
                         Some(tuple) => tuple,
-                        None => return PcidClientResponse::Error(PcidServerResponseError::NonexistentFeature(feature)),
+                        None => {
+                            return PcidClientResponse::Error(
+                                PcidServerResponseError::NonexistentFeature(feature),
+                            )
+                        }
                     };
                     unsafe {
-                        with_pci_func_raw(self.state.preferred_cfg_access(), self.bus_num, self.dev_num, self.func_num, |func| {
-                            capability.set_enabled(true);
-                            capability.write_message_control(func, offset);
-                        });
+                        with_pci_func_raw(
+                            self.state.preferred_cfg_access(),
+                            self.bus_num,
+                            self.dev_num,
+                            self.func_num,
+                            |func| {
+                                capability.set_enabled(true);
+                                capability.write_message_control(func, offset);
+                            },
+                        );
                     }
                     PcidClientResponse::FeatureEnabled(feature)
                 }
                 PciFeature::MsiX => {
-                    let (offset, capability): (u8, &mut MsixCapability) = match self.capabilities.iter_mut().find_map(|&mut (offset, ref mut capability)| capability.as_msix_mut().map(|cap| (offset, cap))) {
+                    let (offset, capability): (u8, &mut MsixCapability) = match self
+                        .capabilities
+                        .iter_mut()
+                        .find_map(|&mut (offset, ref mut capability)| {
+                            capability.as_msix_mut().map(|cap| (offset, cap))
+                        }) {
                         Some(tuple) => tuple,
-                        None => return PcidClientResponse::Error(PcidServerResponseError::NonexistentFeature(feature)),
+                        None => {
+                            return PcidClientResponse::Error(
+                                PcidServerResponseError::NonexistentFeature(feature),
+                            )
+                        }
                     };
                     unsafe {
-                        with_pci_func_raw(self.state.preferred_cfg_access(), self.bus_num, self.dev_num, self.func_num, |func| {
-                            capability.set_msix_enabled(true);
-                            capability.write_a(func, offset);
-                        });
+                        with_pci_func_raw(
+                            self.state.preferred_cfg_access(),
+                            self.bus_num,
+                            self.dev_num,
+                            self.func_num,
+                            |func| {
+                                capability.set_msix_enabled(true);
+                                capability.write_a(func, offset);
+                            },
+                        );
                     }
                     PcidClientResponse::FeatureEnabled(feature)
                 }
-            }
-            PcidClientRequest::FeatureStatus(feature) => PcidClientResponse::FeatureStatus(feature, match feature {
-                PciFeature::Msi => self.capabilities.iter().find_map(|(_, capability)| if let PciCapability::Msi(msi) = capability {
-                    Some(FeatureStatus::enabled(msi.enabled()))
-                } else {
-                    None
-                }).unwrap_or(FeatureStatus::Disabled),
-                PciFeature::MsiX => self.capabilities.iter().find_map(|(_, capability)| if let PciCapability::MsiX(msix) = capability {
-                    Some(FeatureStatus::enabled(msix.msix_enabled()))
-                } else {
-                    None
-                }).unwrap_or(FeatureStatus::Disabled),
-            }),
-            PcidClientRequest::FeatureInfo(feature) => PcidClientResponse::FeatureInfo(feature, match feature {
-                PciFeature::Msi => if let Some(info) = self.capabilities.iter().find_map(|(_, capability)| capability.as_msi()) {
-                    PciFeatureInfo::Msi(*info)
-                } else {
-                    return PcidClientResponse::Error(PcidServerResponseError::NonexistentFeature(feature));
-                }
-                PciFeature::MsiX => if let Some(info) = self.capabilities.iter().find_map(|(_, capability)| capability.as_msix()) {
-                    PciFeatureInfo::MsiX(*info)
-                } else {
-                    return PcidClientResponse::Error(PcidServerResponseError::NonexistentFeature(feature));
-                }
-            }),
+            },
+            PcidClientRequest::FeatureStatus(feature) => PcidClientResponse::FeatureStatus(
+                feature,
+                match feature {
+                    PciFeature::Msi => self
+                        .capabilities
+                        .iter()
+                        .find_map(|(_, capability)| {
+                            if let PciCapability::Msi(msi) = capability {
+                                Some(FeatureStatus::enabled(msi.enabled()))
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(FeatureStatus::Disabled),
+                    PciFeature::MsiX => self
+                        .capabilities
+                        .iter()
+                        .find_map(|(_, capability)| {
+                            if let PciCapability::MsiX(msix) = capability {
+                                Some(FeatureStatus::enabled(msix.msix_enabled()))
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(FeatureStatus::Disabled),
+                },
+            ),
+            PcidClientRequest::FeatureInfo(feature) => PcidClientResponse::FeatureInfo(
+                feature,
+                match feature {
+                    PciFeature::Msi => {
+                        if let Some(info) = self
+                            .capabilities
+                            .iter()
+                            .find_map(|(_, capability)| capability.as_msi())
+                        {
+                            PciFeatureInfo::Msi(*info)
+                        } else {
+                            return PcidClientResponse::Error(
+                                PcidServerResponseError::NonexistentFeature(feature),
+                            );
+                        }
+                    }
+                    PciFeature::MsiX => {
+                        if let Some(info) = self
+                            .capabilities
+                            .iter()
+                            .find_map(|(_, capability)| capability.as_msix())
+                        {
+                            PciFeatureInfo::MsiX(*info)
+                        } else {
+                            return PcidClientResponse::Error(
+                                PcidServerResponseError::NonexistentFeature(feature),
+                            );
+                        }
+                    }
+                },
+            ),
             PcidClientRequest::SetFeatureInfo(info_to_set) => match info_to_set {
-                SetFeatureInfo::Msi(info_to_set) => if let Some((offset, info)) = self.capabilities.iter_mut().find_map(|(offset, capability)| Some((*offset, capability.as_msi_mut()?))) {
-                    if let Some(mme) = info_to_set.multi_message_enable {
-                        if info.multi_message_capable() < mme || mme > 0b101 {
-                            return PcidClientResponse::Error(PcidServerResponseError::InvalidBitPattern);
+                SetFeatureInfo::Msi(info_to_set) => {
+                    if let Some((offset, info)) = self
+                        .capabilities
+                        .iter_mut()
+                        .find_map(|(offset, capability)| Some((*offset, capability.as_msi_mut()?)))
+                    {
+                        if let Some(mme) = info_to_set.multi_message_enable {
+                            if info.multi_message_capable() < mme || mme > 0b101 {
+                                return PcidClientResponse::Error(
+                                    PcidServerResponseError::InvalidBitPattern,
+                                );
+                            }
+                            info.set_multi_message_enable(mme);
                         }
-                        info.set_multi_message_enable(mme);
-
-                    }
-                    if let Some(message_addr) = info_to_set.message_address {
-                        if message_addr & 0b11 != 0 {
-                            return PcidClientResponse::Error(PcidServerResponseError::InvalidBitPattern);
+                        if let Some(message_addr) = info_to_set.message_address {
+                            if message_addr & 0b11 != 0 {
+                                return PcidClientResponse::Error(
+                                    PcidServerResponseError::InvalidBitPattern,
+                                );
+                            }
+                            info.set_message_address(message_addr);
                         }
-                        info.set_message_address(message_addr);
-                    }
-                    if let Some(message_addr_upper) = info_to_set.message_upper_address {
-                        info.set_message_upper_address(message_addr_upper);
-                    }
-                    if let Some(message_data) = info_to_set.message_data {
-                        if message_data & ((1 << info.multi_message_enable()) - 1) != 0 {
-                            return PcidClientResponse::Error(PcidServerResponseError::InvalidBitPattern);
+                        if let Some(message_addr_upper) = info_to_set.message_upper_address {
+                            info.set_message_upper_address(message_addr_upper);
                         }
-                        info.set_message_data(message_data);
-                    }
-                    if let Some(mask_bits) = info_to_set.mask_bits {
-                        info.set_mask_bits(mask_bits);
-                    }
-                    unsafe {
-                        with_pci_func_raw(self.state.preferred_cfg_access(), self.bus_num, self.dev_num, self.func_num, |func| {
-                            info.write_all(func, offset);
-                        });
-                    }
-                    PcidClientResponse::SetFeatureInfo(PciFeature::Msi)
-                } else {
-                    return PcidClientResponse::Error(PcidServerResponseError::NonexistentFeature(PciFeature::Msi));
-                }
-                SetFeatureInfo::MsiX { function_mask } => if let Some((offset, info)) = self.capabilities.iter_mut().find_map(|(offset, capability)| Some((*offset, capability.as_msix_mut()?))) {
-                    if let Some(mask) = function_mask {
-                        info.set_function_mask(mask);
+                        if let Some(message_data) = info_to_set.message_data {
+                            if message_data & ((1 << info.multi_message_enable()) - 1) != 0 {
+                                return PcidClientResponse::Error(
+                                    PcidServerResponseError::InvalidBitPattern,
+                                );
+                            }
+                            info.set_message_data(message_data);
+                        }
+                        if let Some(mask_bits) = info_to_set.mask_bits {
+                            info.set_mask_bits(mask_bits);
+                        }
                         unsafe {
-                            with_pci_func_raw(self.state.preferred_cfg_access(), self.bus_num, self.dev_num, self.func_num, |func| {
-                                info.write_a(func, offset);
-                            });
+                            with_pci_func_raw(
+                                self.state.preferred_cfg_access(),
+                                self.bus_num,
+                                self.dev_num,
+                                self.func_num,
+                                |func| {
+                                    info.write_all(func, offset);
+                                },
+                            );
                         }
+                        PcidClientResponse::SetFeatureInfo(PciFeature::Msi)
+                    } else {
+                        return PcidClientResponse::Error(
+                            PcidServerResponseError::NonexistentFeature(PciFeature::Msi),
+                        );
                     }
-                    PcidClientResponse::SetFeatureInfo(PciFeature::MsiX)
-                } else {
-                    return PcidClientResponse::Error(PcidServerResponseError::NonexistentFeature(PciFeature::MsiX));
                 }
-            }
+                SetFeatureInfo::MsiX { function_mask } => {
+                    if let Some((offset, info)) = self
+                        .capabilities
+                        .iter_mut()
+                        .find_map(|(offset, capability)| Some((*offset, capability.as_msix_mut()?)))
+                    {
+                        if let Some(mask) = function_mask {
+                            info.set_function_mask(mask);
+                            unsafe {
+                                with_pci_func_raw(
+                                    self.state.preferred_cfg_access(),
+                                    self.bus_num,
+                                    self.dev_num,
+                                    self.func_num,
+                                    |func| {
+                                        info.write_a(func, offset);
+                                    },
+                                );
+                            }
+                        }
+                        PcidClientResponse::SetFeatureInfo(PciFeature::MsiX)
+                    } else {
+                        return PcidClientResponse::Error(
+                            PcidServerResponseError::NonexistentFeature(PciFeature::MsiX),
+                        );
+                    }
+                }
+            },
             PcidClientRequest::ReadConfig(offset) => {
                 let value = unsafe {
-                    with_pci_func_raw(self.state.preferred_cfg_access(), self.bus_num, self.dev_num, self.func_num, |func| {
-                        func.read_u32(offset)
-                    })
+                    with_pci_func_raw(
+                        self.state.preferred_cfg_access(),
+                        self.bus_num,
+                        self.dev_num,
+                        self.func_num,
+                        |func| func.read_u32(offset),
+                    )
                 };
                 return PcidClientResponse::ReadConfig(value);
-            },
+            }
             PcidClientRequest::WriteConfig(offset, value) => {
                 unsafe {
-                    with_pci_func_raw(self.state.preferred_cfg_access(), self.bus_num, self.dev_num, self.func_num, |func| {
-                        func.write_u32(offset, value);
-                    });
+                    with_pci_func_raw(
+                        self.state.preferred_cfg_access(),
+                        self.bus_num,
+                        self.dev_num,
+                        self.func_num,
+                        |func| {
+                            func.write_u32(offset, value);
+                        },
+                    );
                 }
                 return PcidClientResponse::WriteConfig;
             }
         }
     }
-    fn handle_spawn(mut self, pcid_to_client_write: Arc<Mutex<Vec<u8>>>, pcid_from_client_read: Arc<Mutex<Vec<u8>>>, args: driver_interface::SubdriverArguments) {
+    fn handle_spawn(
+        mut self,
+        pcid_to_client_write: Arc<Mutex<Vec<u8>>>,
+        pcid_from_client_read: Arc<Mutex<Vec<u8>>>,
+        args: driver_interface::SubdriverArguments,
+    ) {
         use driver_interface::*;
 
         let mut from = &pcid_from_client_read.lock().unwrap()[..];
@@ -227,46 +362,64 @@ impl State {
 static FROM_CLIENT: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
 static TO_CLIENT: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
 
-fn handle_parsed_header(state: Arc<State>, config: &Config, bus_num: u8,
-                        dev_num: u8, func_num: u8, header: PciHeader) {
+fn handle_parsed_header(
+    state: Arc<State>,
+    config: &Config,
+    bus_num: u8,
+    dev_num: u8,
+    func_num: u8,
+    header: PciHeader,
+) {
     let pci = state.preferred_cfg_access();
 
     let raw_class: u8 = header.class().into();
-    let mut string = format!("PCI {:>02X}/{:>02X}/{:>02X} {:>04X}:{:>04X} {:>02X}.{:>02X}.{:>02X}.{:>02X} {:?}",
-                             bus_num, dev_num, func_num, header.vendor_id(), header.device_id(), raw_class,
-                             header.subclass(), header.interface(), header.revision(), header.class());
+    let mut string = format!(
+        "PCI {:>02X}/{:>02X}/{:>02X} {:>04X}:{:>04X} {:>02X}.{:>02X}.{:>02X}.{:>02X} {:?}",
+        bus_num,
+        dev_num,
+        func_num,
+        header.vendor_id(),
+        header.device_id(),
+        raw_class,
+        header.subclass(),
+        header.interface(),
+        header.revision(),
+        header.class()
+    );
     match header.class() {
         PciClass::Legacy if header.subclass() == 1 => string.push_str("  VGA CTL"),
         PciClass::Storage => match header.subclass() {
             0x01 => {
                 string.push_str(" IDE");
-            },
-            0x06 => if header.interface() == 0 {
-                string.push_str(" SATA VND");
-            } else if header.interface() == 1 {
-                string.push_str(" SATA AHCI");
-            },
-            _ => ()
+            }
+            0x06 => {
+                if header.interface() == 0 {
+                    string.push_str(" SATA VND");
+                } else if header.interface() == 1 {
+                    string.push_str(" SATA AHCI");
+                }
+            }
+            _ => (),
         },
         PciClass::SerialBus => match header.subclass() {
             0x03 => match header.interface() {
                 0x00 => {
                     string.push_str(" UHCI");
-                },
+                }
                 0x10 => {
                     string.push_str(" OHCI");
-                },
+                }
                 0x20 => {
                     string.push_str(" EHCI");
-                },
+                }
                 0x30 => {
                     string.push_str(" XHCI");
-                },
-                _ => ()
+                }
+                _ => (),
             },
-            _ => ()
+            _ => (),
         },
-        _ => ()
+        _ => (),
     }
 
     for (i, bar) in header.bars().iter().enumerate() {
@@ -279,15 +432,21 @@ fn handle_parsed_header(state: Arc<State>, config: &Config, bus_num: u8,
 
     for driver in config.drivers.iter() {
         if let Some(class) = driver.class {
-            if class != raw_class { continue; }
+            if class != raw_class {
+                continue;
+            }
         }
 
         if let Some(subclass) = driver.subclass {
-            if subclass != header.subclass() { continue; }
+            if subclass != header.subclass() {
+                continue;
+            }
         }
 
         if let Some(interface) = driver.interface {
-            if interface != header.interface() { continue; }
+            if interface != header.interface() {
+                continue;
+            }
         }
 
         if let Some(ref ids) = driver.ids {
@@ -296,7 +455,9 @@ fn handle_parsed_header(state: Arc<State>, config: &Config, bus_num: u8,
                 let vendor_without_prefix = vendor.trim_start_matches("0x");
                 let vendor = i64::from_str_radix(vendor_without_prefix, 16).unwrap() as u16;
 
-                if vendor != header.vendor_id() { continue; }
+                if vendor != header.vendor_id() {
+                    continue;
+                }
 
                 for device in devices {
                     if *device == header.device_id() {
@@ -305,20 +466,29 @@ fn handle_parsed_header(state: Arc<State>, config: &Config, bus_num: u8,
                     }
                 }
             }
-            if !device_found { continue; }
+            if !device_found {
+                continue;
+            }
         } else {
             if let Some(vendor) = driver.vendor {
-                if vendor != header.vendor_id() { continue; }
+                if vendor != header.vendor_id() {
+                    continue;
+                }
             }
 
             if let Some(device) = driver.device {
-                if device != header.device_id() { continue; }
+                if device != header.device_id() {
+                    continue;
+                }
             }
         }
 
         if let Some(ref device_id_range) = driver.device_id_range {
-            if header.device_id() < device_id_range.start  ||
-               device_id_range.end <= header.device_id() { continue; }
+            if header.device_id() < device_id_range.start
+                || device_id_range.end <= header.device_id()
+            {
+                continue;
+            }
         }
 
         if let Some(ref args) = driver.command {
@@ -373,11 +543,7 @@ fn handle_parsed_header(state: Arc<State>, config: &Config, bus_num: u8,
                     };
 
                     let size = (!masked).wrapping_add(1);
-                    bar_sizes[i] = if size <= 1 {
-                        0
-                    } else {
-                        size
-                    };
+                    bar_sizes[i] = if size <= 1 { 0 } else { size };
                 }
             }
 
@@ -388,17 +554,19 @@ fn handle_parsed_header(state: Arc<State>, config: &Config, bus_num: u8,
                 };
                 let dev = PciDev {
                     bus: &bus,
-                    num: dev_num
+                    num: dev_num,
                 };
                 let func = PciFunc {
                     dev: &dev,
                     num: func_num,
                 };
-                crate::pci::cap::CapabilitiesIter { inner: crate::pci::cap::CapabilityOffsetsIter::new(header.cap_pointer(), &func) }.collect::<Vec<_>>()
+                crate::pci::cap::CapabilitiesIter {
+                    inner: crate::pci::cap::CapabilityOffsetsIter::new(header.cap_pointer(), &func),
+                }
+                .collect::<Vec<_>>()
             } else {
                 Vec::new()
             };
-/
             use driver_interface::LegacyInterruptPin;
 
             let legacy_interrupt_pin = match interrupt_pin {
@@ -426,9 +594,7 @@ fn handle_parsed_header(state: Arc<State>, config: &Config, bus_num: u8,
                 venid: header.vendor_id(),
             };
 
-            let subdriver_args = driver_interface::SubdriverArguments {
-                func,
-            };
+            let subdriver_args = driver_interface::SubdriverArguments { func };
 
             let mut args = args.iter();
             if let Some(program) = args.next() {
@@ -454,41 +620,42 @@ fn handle_parsed_header(state: Arc<State>, config: &Config, bus_num: u8,
                         "$IRQ" => format!("{}", irq),
                         "$VENID" => format!("{:>04X}", header.vendor_id()),
                         "$DEVID" => format!("{:>04X}", header.device_id()),
-                        _ => arg.clone()
+                        _ => arg.clone(),
                     };
                     command.arg(&arg);
                 }
 
                 println!("PCID SPAWN {:?}", command);
 
-                let (pcid_to_client_write, pcid_from_client_read) = (Arc::clone(&TO_CLIENT), Arc::clone(&FROM_CLIENT));
+                let (pcid_to_client_write, pcid_from_client_read) =
+                    (Arc::clone(&TO_CLIENT), Arc::clone(&FROM_CLIENT));
 
- //TODO:
- //this is RedoxOS's way of doing shared memory
- //two raw file descriptors,
- //reader on one side
- //writer on the other, but attached via the same
- //file descriptor.
- //the TO/FROM are id 1/2
- //then there are two references handed out
- //one to the local handle_spawn function
- //and the other to the "global" envrionemtn variable space
- //with the TO_READ/FROM_WRITE being shared
- //and TO_WRITE/FROM_READ being moved to a local spawned thread
- //to configure HDAudio, we will need to run this function using shared memory, ideally Arc<Mutex<Vec<u8>>> since this creates shared, mutally excluusive access to what can become raw buffers (&mut [u8])
- //there will need to be two buffers, then you can pass copies of the Arc<_> to the two sides.
- //they can unlock them when needed
- //hopefully locking doesn't cause problems with timing.
-// Redox also wants to set envrionemnt variables ( as set in handle_spanw
-// and use that to launch a separate command
-// in this case, it actually looks up a driver's `main` to run.
-// it seems every driver runs in its own process.
-// we need to combine everyting to run in one binary.
-// how to share all these variables, and launch with all these options, I'm not really sure....
-// so here we'd want to find `hdaudio` outputs, and then figure out how to pass all these arguments
-// also, microkernal for the win, I never realized how clean it was to run stuff like this in a uKernal environment.
-// I'd be interested on adding development to this platform in the future
-// maybe get atspi going? with help from the main developer? (remember he is in the Odilia channel)
+                //TODO:
+                //this is RedoxOS's way of doing shared memory
+                //two raw file descriptors,
+                //reader on one side
+                //writer on the other, but attached via the same
+                //file descriptor.
+                //the TO/FROM are id 1/2
+                //then there are two references handed out
+                //one to the local handle_spawn function
+                //and the other to the "global" envrionemtn variable space
+                //with the TO_READ/FROM_WRITE being shared
+                //and TO_WRITE/FROM_READ being moved to a local spawned thread
+                //to configure HDAudio, we will need to run this function using shared memory, ideally Arc<Mutex<Vec<u8>>> since this creates shared, mutally excluusive access to what can become raw buffers (&mut [u8])
+                //there will need to be two buffers, then you can pass copies of the Arc<_> to the two sides.
+                //they can unlock them when needed
+                //hopefully locking doesn't cause problems with timing.
+                // Redox also wants to set envrionemnt variables ( as set in handle_spanw
+                // and use that to launch a separate command
+                // in this case, it actually looks up a driver's `main` to run.
+                // it seems every driver runs in its own process.
+                // we need to combine everyting to run in one binary.
+                // how to share all these variables, and launch with all these options, I'm not really sure....
+                // so here we'd want to find `hdaudio` outputs, and then figure out how to pass all these arguments
+                // also, microkernal for the win, I never realized how clean it was to run stuff like this in a uKernal environment.
+                // I'd be interested on adding development to this platform in the future
+                // maybe get atspi going? with help from the main developer? (remember he is in the Odilia channel)
 
                 match command.envs(envs).spawn() {
                     Ok(mut child) => {
@@ -503,16 +670,22 @@ fn handle_parsed_header(state: Arc<State>, config: &Config, bus_num: u8,
                         };
                         let thread = thread::spawn(move || {
                             // RFLAGS are no longer kept in the relibc clone() implementation.
-                            unsafe { syscall::iopl(3).expect("pcid: failed to set IOPL"); }
+                            unsafe {
+                                syscall::iopl(3).expect("pcid: failed to set IOPL");
+                            }
 
-                            driver_handler.handle_spawn(pcid_to_client_write, pcid_from_client_read, subdriver_args);
+                            driver_handler.handle_spawn(
+                                pcid_to_client_write,
+                                pcid_from_client_read,
+                                subdriver_args,
+                            );
                         });
                         match child.wait() {
                             Ok(_status) => (),
                             Err(err) => error!("pcid: failed to wait for {:?}: {}", command, err),
                         }
                     }
-                    Err(err) => error!("pcid: failed to execute {:?}: {}", command, err)
+                    Err(err) => error!("pcid: failed to execute {:?}: {}", command, err),
                 }
             }
         }
@@ -597,8 +770,18 @@ fn main() {
                 let func_num = func.num;
                 match PciHeader::from_reader(func) {
                     Ok(header) => {
-                        handle_parsed_header(Arc::clone(&state), &config, bus.num, dev.num, func_num, header);
-                        if let PciHeader::PciToPci { secondary_bus_num, .. } = header {
+                        handle_parsed_header(
+                            Arc::clone(&state),
+                            &config,
+                            bus.num,
+                            dev.num,
+                            func_num,
+                            header,
+                        );
+                        if let PciHeader::PciToPci {
+                            secondary_bus_num, ..
+                        } = header
+                        {
                             bus_nums.push(secondary_bus_num);
                         }
                     }
@@ -612,7 +795,7 @@ fn main() {
                                 continue 'dev;
                             }
                         }
-                    },
+                    }
                     Err(PciHeaderError::UnknownHeaderType(id)) => {
                         warn!("pcid: unknown header type: {}", id);
                     }
