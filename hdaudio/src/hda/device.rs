@@ -171,6 +171,7 @@ impl IntelHDA {
     let cmd_ptr: *mut u8 = unsafe { alloc(cmd_layout) };
 
 		println!("Phys: {:016X}", cmd_ptr as usize);
+    println!("Try to create module struct");
 		let mut module = IntelHDA {
 			vend_prod: vend_prod,
 			base: base,
@@ -201,12 +202,17 @@ impl IntelHDA {
 			handles: Mutex::new(BTreeMap::new()),
 			next_id: AtomicUsize::new(0),
 		};
+    println!("Made module struct");
 
+    println!("[HDA] init");
 		module.init();
 
+    println!("[HDA] info");
 		module.info();
+    println!("[HDA] enumerate");
 		module.enumerate();
 
+    println!("[HDA] configure");
 		module.configure();
 		println!("IHDA: Initialization finished.");
 		Ok(module)
@@ -214,6 +220,7 @@ impl IntelHDA {
 	}
 
 	pub fn init(&mut self) -> bool {
+    println!("[HDA_INIT] reset controller");
 		self.reset_controller();
 
 		let use_immediate_command_interface = match self.vend_prod {
@@ -222,7 +229,9 @@ impl IntelHDA {
 			_ => true,
 		};
 
+    println!("[HDA_INIT] Command init");
 		self.cmd.init(use_immediate_command_interface);
+    println!("[HDA_INIT] Init interrupts");
 		self.init_interrupts();
 
 		true
