@@ -1,9 +1,3 @@
-// TODO: current idea is to use async
-// ... but it is not supported in any way on UEFI
-// so SOL for now;
-// next step: re-architeche to allow reading and writing directly, without intermingling.
-// or, make sure updates are sent out by the PcidServerHandler on a consistent basis.
-
 mod hda;
 
 use syscall::iopl;
