@@ -246,7 +246,12 @@ pub fn send<W: Write + ?Sized, T: Serialize>(w: &mut W, message: &T) -> Result<(
 pub fn recv<R: Read + ?Sized, T: DeserializeOwned>(r: &mut R) -> Result<T> {
     println!("recv...");
     let mut length_bytes = [0u8; 8];
-    r.read_exact(&mut length_bytes)?;
+    println!("attempt to read exact");
+    match r.read_exact(&mut length_bytes) {
+      Ok(()) => println!("Read exact good!"),
+      Err(_) => println!("BAD READ!"),
+    }
+    println!("attempt to interpret exact");
     let length = u64::from_le_bytes(length_bytes);
     println!("{}...", length);
     if length > 0x100_000 {
