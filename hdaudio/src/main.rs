@@ -101,24 +101,14 @@ fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
 use futures_lite::future::{zip, block_on};
 
 fn main() {
-  println!("Hello local executer!");
-  let ex = LocalExecutor::new();
-  println!("got it!");
-  let pci  = ex.spawn(async {
-    pci_main().await
-  });
-  println!("Created pci future");
-  let hda = ex.spawn(async {
-    hda_main().await
-  });
-  println!("Created hda future");
-  block_on(pci);
-  println!("Ran futures");
+  let (pci_from_write, pci_from_read) = bounded(128);
+  let (pci_to_write, pci_to_read) = bounded(128);
+  pci_main(pci_from_write, pci_to_read);
 }
 
-async fn hda_main() {
+fn hda_main(pci_to_write: Sender<Vec<u8>>, pci_from_read: Receiver<Vec<u8>>) {
   std::println!("Opening Intel HDA"); 
-  let mut pcid_handle = PcidServerHandle::connect(Arc::clone(&TO_CLIENT), Arc::clone(&FROM_CLIENT)).expect("ihdad: failed to setup channel to pcid");
+  let mut pcid_handle = PcidServerHandle::connect(pci_to_write, pci_from_read).expect("ihdad: failed to setup channel to pcid");
   std::println!("Setup PCID Handle"); 
 
   let pci_config = pcid_handle.fetch_config().expect("ihdad: failed to fetch config");
@@ -642,17 +632,15 @@ impl DriverHandler {
     }
     fn handle_spawn(
         mut self,
-        pcid_to_client_write: Arc<Mutex<Vec<u8>>>,
-        pcid_from_client_read: Arc<Mutex<Vec<u8>>>,
+        pcid_to_client_write: &mut Sender<Vec<u8>>,
+        pcid_from_client_read: &mut Receiver<Vec<u8>>,
         args: driver_interface::SubdriverArguments,
     ) {
         use driver_interface::*;
 
-        let mut from = &pcid_from_client_read.lock().unwrap()[..];
-        while let Ok(msg) = recv(&mut from) {
+        while let Ok(msg) = recv(pcid_from_client_read) {
             let response = self.respond(msg, &args);
-            let mut to = pcid_to_client_write.lock().unwrap();
-            send(&mut *to, &response).unwrap();
+            send(pcid_to_client_write, &response).unwrap();
         }
     }
 }
@@ -670,10 +658,7 @@ impl State {
     }
 }
 
-lazy_static::lazy_static! {
-  static ref FROM_CLIENT: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
-  static ref TO_CLIENT: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
-}
+use crossbeam::channel::{Sender, Receiver, bounded};
 
 fn handle_parsed_header(
     state: Arc<State>,
@@ -682,6 +667,8 @@ fn handle_parsed_header(
     dev_num: u8,
     func_num: u8,
     header: PciHeader,
+    pcid_to_write: Sender<Vec<u8>>,
+    pcid_from_read: Receiver<Vec<u8>>
 ) {
     let pci = state.preferred_cfg_access();
 
@@ -940,9 +927,6 @@ fn handle_parsed_header(
 
                 std::println!("PCID SPAWN {:?}", command);
 
-                let (pcid_to_client_write, pcid_from_client_read) =
-                    (Arc::clone(&TO_CLIENT), Arc::clone(&FROM_CLIENT));
-
                 //TODO:
                 //this is RedoxOS's way of doing shared memory
                 //two raw file descriptors,
@@ -1010,7 +994,10 @@ fn handle_parsed_header(
     }
 }
 
-async fn pci_main() {
+fn pci_main(
+  pcid_from_write: Sender<Vec<u8>>,
+  pcid_to_read: Receiver<Vec<u8>>
+) {
     let mut config = Config::default();
 
     let pci = Arc::new(Pci::new());
@@ -1051,6 +1038,8 @@ async fn pci_main() {
                             dev.num,
                             func_num,
                             header,
+                            pcid_from_write.clone(),
+                            pcid_to_read.clone(),
                         );
                         if let PciHeader::PciToPci {
                             secondary_bus_num, ..
