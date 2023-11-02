@@ -95,6 +95,7 @@ fn main() -> Result<ExitCode, Box<dyn Error>> {
   println!("Initializing PCI");
   pci_main();
   println!("Opening Intel HDA"); 
+  // TODO: switch to connect() and manually pass Arc handles
   let mut pcid_handle = PcidServerHandle::connect_default().expect("ihdad: failed to setup channel to pcid");
   println!("Setup PCID Handle"); 
 
