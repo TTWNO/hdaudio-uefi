@@ -14,7 +14,4 @@ spin = "0.9"
 
 common = { path = "../common" }
 pcid = { path = "../pcid" }
-lazy_static = "1.4.0"
-async-executor = "1.6.0"
-futures-lite = { version = "2.0.0" }
-crossbeam = { version = "0.8.2", features = ["crossbeam-channel"] }
+crossbeam = { version = "0.8.2", default-features = false, features = ["crossbeam-channel", "nightly", "alloc", "std"] }

@@ -1,7 +1,6 @@
 mod hda;
 
 use syscall::iopl;
-use async_executor::LocalExecutor;
 use std::error::Error;
 use std::process::ExitCode;
 use std::convert::TryFrom;
@@ -92,12 +91,11 @@ fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
     }
 }
 
-use futures_lite::future::{zip, block_on};
-
 fn main() {
-  let (pci_from_write, pci_from_read) = bounded(128);
-  let (pci_to_write, pci_to_read) = bounded(128);
-  pci_main(pci_from_write, pci_to_read);
+  let (mut pci_from_write, pci_from_read) = bounded(1024);
+  let (pci_to_write, mut pci_to_read) = bounded(1024);
+  pci_main(&mut pci_from_write, &mut pci_to_read);
+  hda_main(pci_to_write, pci_from_read);
 }
 
 fn hda_main(pci_to_write: Sender<Vec<u8>>, pci_from_read: Receiver<Vec<u8>>) {
@@ -989,8 +987,8 @@ fn handle_parsed_header(
 }
 
 fn pci_main(
-  pcid_from_write: Sender<Vec<u8>>,
-  pcid_to_read: Receiver<Vec<u8>>
+  pcid_from_write: &mut Sender<Vec<u8>>,
+  pcid_to_read: &mut Receiver<Vec<u8>>
 ) {
     let mut config = Config::default();
 
