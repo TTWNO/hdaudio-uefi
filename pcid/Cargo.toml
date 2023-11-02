@@ -30,4 +30,4 @@ toml = "0.5"
 
 common = { path = "../common" }
 lazy_static = "1.4.0"
-crossbeam = { version = "0.8.2", features = ["crossbeam-channel"] }
+crossbeam = { version = "0.8.2", default-features = false, features = ["crossbeam-channel", "nightly", "alloc", "std"] }

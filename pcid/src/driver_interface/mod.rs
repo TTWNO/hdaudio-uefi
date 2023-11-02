@@ -142,7 +142,7 @@ pub enum PcidClientHandleError {
     #[error("unable to send data: {0}")]
     SendError(#[from] SendError<Vec<u8>>),
 
-    #[error("unable to send data: {0}")]
+    #[error("unable to recv data: {0}")]
     RecvError(#[from] RecvError),
 }
 pub type Result<T, E = PcidClientHandleError> = std::result::Result<T, E>;
@@ -242,7 +242,13 @@ pub fn send<T: Serialize>(w: &mut Sender<Vec<u8>>, message: &T) -> Result<()> {
     let mut data = Vec::new();
     bincode::serialize_into(&mut data, message)?;
     println!("...serialized ({})...", data.len());
-    w.send(data)?;
+    match w.send(data) {
+      Ok(()) => println!("SEND OK"),
+      Err(e) => {
+        println!("SEND ERR");
+        return Err(PcidClientHandleError::SendError(e));
+      },
+    };
     println!("written");
     Ok(())
 }
