@@ -695,52 +695,6 @@ fn handle_parsed_header(
         }
     }
 }
-//
-//fn setup_logging(verbosity: u8) -> Option<&'static RedoxLogger> {
-//    let log_level = match verbosity {
-//        0 => log::LevelFilter::Info,
-//        1 => log::LevelFilter::Debug,
-//        _ => log::LevelFilter::Trace,
-//    };
-//    let mut logger = RedoxLogger::new()
-//        .with_output(
-//            OutputBuilder::stderr()
-//                .with_ansi_escape_codes()
-//                .with_filter(log_level)
-//                .flush_on_newline(true)
-//                .build()
-//         );
-//
-//    match OutputBuilder::in_redox_logging_scheme("bus", "pci", "pcid.log") {
-//        Ok(b) => logger = logger.with_output(
-//            b.with_filter(log::LevelFilter::Trace)
-//                .flush_on_newline(true)
-//                .build()
-//        ),
-//        Err(error) => eprintln!("pcid: failed to open pcid.log"),
-//    }
-//    match OutputBuilder::in_redox_logging_scheme("bus", "pci", "pcid.ansi.log") {
-//        Ok(b) => logger = logger.with_output(
-//            b.with_filter(log::LevelFilter::Trace)
-//                .with_ansi_escape_codes()
-//                .flush_on_newline(true)
-//                .build()
-//        ),
-//        Err(error) => eprintln!("pcid: failed to open pcid.ansi.log"),
-//    }
-//
-//    match logger.enable() {
-//        Ok(logger_ref) => {
-//            eprintln!("pcid: enabled logger");
-//            Some(logger_ref)
-//        }
-//        Err(error) => {
-//            eprintln!("pcid: failed to set default logger: {}", error);
-//            None
-//        }
-//    }
-//}
-//
 fn main() {
     let mut config = Config::default();
 
