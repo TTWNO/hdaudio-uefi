@@ -3,6 +3,7 @@ use std::io::Bytes;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
+use crossbeam::channel::{Sender, Receiver, bounded, SendError, RecvError};
 use std::{env, io};
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -137,6 +138,12 @@ pub enum PcidClientHandleError {
 
     #[error("invalid response: {0:?}")]
     InvalidResponse(PcidClientResponse),
+
+    #[error("unable to send data: {0}")]
+    SendError(#[from] SendError<Vec<u8>>),
+
+    #[error("unable to send data: {0}")]
+    RecvError(#[from] RecvError),
 }
 pub type Result<T, E = PcidClientHandleError> = std::result::Result<T, E>;
 
@@ -226,40 +233,22 @@ pub enum PcidClientResponse {
 // are stored in the same buffer as the actual data).
 /// A handle from a `pcid` client (e.g. `ahcid`) to `pcid`.
 pub struct PcidServerHandle {
-    pcid_to_client: Arc<Mutex<Vec<u8>>>,
-    pcid_from_client: Arc<Mutex<Vec<u8>>>,
+    pcid_to_client: Sender<Vec<u8>>,
+    pcid_from_client: Receiver<Vec<u8>>,
 }
 
-pub fn send<W: Write + ?Sized, T: Serialize>(w: &mut W, message: &T) -> Result<()> {
+pub fn send<T: Serialize>(w: &mut Sender<Vec<u8>>, message: &T) -> Result<()> {
     println!("send...");
     let mut data = Vec::new();
     bincode::serialize_into(&mut data, message)?;
     println!("...serialized ({})...", data.len());
-    let length_bytes = u64::to_le_bytes(data.len() as u64);
-    println!("Made into bytes");
-    w.write_all(&length_bytes)?;
-    println!("Wrote byte length");
-    w.write_all(&data)?;
+    w.send(data)?;
     println!("written");
     Ok(())
 }
-pub fn recv<R: Read + ?Sized, T: DeserializeOwned>(r: &mut R) -> Result<T> {
+pub fn recv<T: DeserializeOwned>(r: &mut Receiver<Vec<u8>>) -> Result<T> {
     println!("recv...");
-    let mut length_bytes = [0u8; 8];
-    println!("attempt to read exact");
-    match r.read_exact(&mut length_bytes) {
-      Ok(()) => println!("Read exact good!"),
-      Err(_) => println!("BAD READ!"),
-    }
-    println!("attempt to interpret exact");
-    let length = u64::from_le_bytes(length_bytes);
-    println!("{}...", length);
-    if length > 0x100_000 {
-        panic!("pcid_interface: buffer too large");
-    }
-    let mut data = vec![0u8; length as usize];
-    r.read_exact(&mut data)?;
-    println!("reading...");
+    let data = r.recv()?;
     println!("{:?}", data);
 
     let b = bincode::deserialize_from(&data[..])?;
@@ -269,29 +258,28 @@ pub fn recv<R: Read + ?Sized, T: DeserializeOwned>(r: &mut R) -> Result<T> {
 
 impl PcidServerHandle {
     pub fn connect(
-        pcid_to_client: Arc<Mutex<Vec<u8>>>,
-        pcid_from_client: Arc<Mutex<Vec<u8>>>,
+        pcid_to_client: Sender<Vec<u8>>,
+        pcid_from_client: Receiver<Vec<u8>>,
     ) -> Result<Self> {
         Ok(Self {
             pcid_to_client,
             pcid_from_client,
         })
     }
+    /*
     pub fn connect_default() -> Result<Self> {
         println!("Try connect default!");
-        let pcid_to_client_fd = Arc::new(Mutex::new(Vec::new()));
-        let pcid_from_client_fd = Arc::new(Mutex::new(Vec::new()));
+        let (pcid_to_client_fd, pcid_from_client_fd) = bounded();
         println!("Created files");
 
         Self::connect(pcid_to_client_fd, pcid_from_client_fd)
     }
+    */
     pub(crate) fn send(&mut self, req: &PcidClientRequest) -> Result<()> {
-        let mut tex = self.pcid_to_client.lock().unwrap();
-        send(&mut *tex, req)
+        send(&mut self.pcid_to_client, req)
     }
     pub(crate) fn recv(&mut self) -> Result<PcidClientResponse> {
-        let mut slice = &self.pcid_from_client.lock().unwrap()[..];
-        recv(&mut slice)
+        recv(&mut self.pcid_from_client)
     }
     pub fn fetch_config(&mut self) -> Result<SubdriverArguments> {
         println!("Try to send");
