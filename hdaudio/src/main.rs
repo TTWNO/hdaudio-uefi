@@ -661,7 +661,7 @@ fn handle_parsed_header(
     header: PciHeader,
     pcid_to_write: Sender<Vec<u8>>,
     pcid_from_read: Receiver<Vec<u8>>
-) {
+) -> Vec<DriverHandler> {
     let pci = state.preferred_cfg_access();
 
     let raw_class: u8 = header.class().into();
@@ -721,6 +721,7 @@ fn handle_parsed_header(
     }
 
     std::println!("{}", string);
+    let mut driver_handlers = Vec::new();
 
     for driver in config.drivers.iter() {
         if let Some(class) = driver.class {
@@ -949,9 +950,6 @@ fn handle_parsed_header(
                 // try to hook into spawning a separate function but not a separate command
 
                 // TODO: fix command issues
-                /*
-                match command.spawn() {
-                    Ok(mut child) => {
                         let driver_handler = DriverHandler {
                             bus_num,
                             dev_num,
@@ -961,29 +959,18 @@ fn handle_parsed_header(
                             state: Arc::clone(&state),
                             capabilities,
                         };
-                        let thread = thread::spawn(move || {
-                            // RFLAGS are no longer kept in the relibc clone() implementation.
-                            unsafe {
-                                syscall::iopl(3).expect("pcid: failed to set IOPL");
-                            }
-
-                            driver_handler.handle_spawn(
-                                pcid_to_client_write,
-                                pcid_from_client_read,
-                                subdriver_args,
-                            );
-                        });
-                        match child.wait() {
-                            Ok(_status) => (),
-                            Err(err) => error!("pcid: failed to wait for {:?}: {}", command, err),
-                        }
-                    }
-                    Err(err) => error!("pcid: failed to execute {:?}: {}", command, err),
-                }
-                */
+                        driver_handlers.push(driver_handler);
+                        /*
+                        driver_handler.handle_spawn(
+                            &mut pcid_to_write.clone(),
+                            &mut pcid_from_read.clone(),
+                            subdriver_args,
+                        );
+                        */
             }
         }
     }
+  driver_handlers
 }
 
 fn pci_main(
