@@ -1,6 +1,7 @@
 mod hda;
 
 use syscall::iopl;
+use async_executor::LocalExecutor;
 use std::error::Error;
 use std::process::ExitCode;
 use std::convert::TryFrom;
@@ -36,7 +37,7 @@ fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
     let irq = pci_config.func.legacy_interrupt_line;
 
     let all_pci_features = pcid_handle.fetch_all_features().expect("ihdad: failed to fetch pci features");
-    println!("PCI FEATURES: {:?}", all_pci_features);
+    std::println!("PCI FEATURES: {:?}", all_pci_features);
 
     let (has_msi, mut msi_enabled) = all_pci_features.iter().map(|(feature, status)| (feature.is_msi(), status.is_enabled())).find(|&(f, _)| f).unwrap_or((false, false));
     let (has_msix, mut msix_enabled) = all_pci_features.iter().map(|(feature, status)| (feature.is_msix(), status.is_enabled())).find(|&(f, _)| f).unwrap_or((false, false));
@@ -53,7 +54,7 @@ fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
 
         let capability = match pcid_handle.feature_info(PciFeature::Msi).expect("ihdad: failed to retrieve the MSI capability structure from pcid") {
             PciFeatureInfo::Msi(s) => s,
-            PciFeatureInfo::MsiX(_) => panic!(),
+            PciFeatureInfo::MsiX(_) => std::panic!(),
         };
         // TODO: Allow allocation of up to 32 vectors.
 
@@ -77,11 +78,11 @@ fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
         pcid_handle.set_feature_info(SetFeatureInfo::Msi(set_feature_info)).expect("ihdad: failed to set feature info");
 
         pcid_handle.enable_feature(PciFeature::Msi).expect("ihdad: failed to enable MSI");
-        println!("Enabled MSI");
+        std::println!("Enabled MSI");
 
         Some(interrupt_handle)
     } else if pci_config.func.legacy_interrupt_pin.is_some() {
-        println!("Legacy IRQ {}", irq);
+        std::println!("Legacy IRQ {}", irq);
 
         // legacy INTx# interrupt pins.
         Some(File::open(format!("irq:{}", irq)).expect("ihdad: failed to open legacy IRQ file"))
@@ -91,43 +92,58 @@ fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
     }
 }
 
-fn main() -> Result<ExitCode, Box<dyn Error>> {
-  println!("Initializing PCI");
-  pci_main();
-  println!("Opening Intel HDA"); 
-  // TODO: switch to connect() and manually pass Arc handles
-  let mut pcid_handle = PcidServerHandle::connect_default().expect("ihdad: failed to setup channel to pcid");
-  println!("Setup PCID Handle"); 
+use futures_lite::future::{zip, block_on};
+
+fn main() {
+  println!("Hello local executer!");
+  let ex = LocalExecutor::new();
+  println!("got it!");
+  let pci  = ex.spawn(async {
+    pci_main().await
+  });
+  println!("Created pci future");
+  let hda = ex.spawn(async {
+    hda_main().await
+  });
+  println!("Created hda future");
+  block_on(pci);
+  println!("Ran futures");
+}
+
+async fn hda_main() {
+  std::println!("Opening Intel HDA"); 
+  let mut pcid_handle = PcidServerHandle::connect(Arc::clone(&TO_CLIENT), Arc::clone(&FROM_CLIENT)).expect("ihdad: failed to setup channel to pcid");
+  std::println!("Setup PCID Handle"); 
 
   let pci_config = pcid_handle.fetch_config().expect("ihdad: failed to fetch config");
-  println!("Setup PCI Config"); 
+  std::println!("Setup PCI Config"); 
 
   let mut name = pci_config.func.name();
   name.push_str("_ihda");
-  println!("Name added _ihda"); 
+  std::println!("Name added _ihda"); 
 
   let bar = pci_config.func.bars[0];
   let bar_size = pci_config.func.bar_sizes[0];
   let bar_ptr = match bar {
       pcid_interface::PciBar::Memory32(ptr) => match ptr {
-          0 => panic!("BAR 0 is mapped to address 0"),
+          0 => std::panic!("BAR 0 is mapped to address 0"),
           _ => ptr as u64,
       },
       pcid_interface::PciBar::Memory64(ptr) => match ptr {
-          0 => panic!("BAR 0 is mapped to address 0"),
+          0 => std::panic!("BAR 0 is mapped to address 0"),
           _ => ptr,
       },
-      other => panic!("Expected memory bar, found {}", other),
+      other => std::panic!("Expected memory bar, found {}", other),
   };
-  println!("Set up bar!"); 
+  std::println!("Set up bar!"); 
 
-  println!(" + IHDA {} on: {:#X} size: {}", name, bar_ptr, bar_size);
+  std::println!(" + IHDA {} on: {:#X} size: {}", name, bar_ptr, bar_size);
 
 let address = unsafe {
 	common::physmap(bar_ptr as usize, bar_size as usize, common::Prot::RW, common::MemoryType::Uncacheable)
 		.expect("ihdad: failed to map address") as usize
 };
-  println!("Address mapped properly!");
+  std::println!("Address mapped properly!");
 
   //TODO: MSI-X
   let mut irq_file = get_int_method(&mut pcid_handle).expect("ihdad: no interrupt file");
@@ -136,8 +152,6 @@ let address = unsafe {
 
 	let device = Arc::new(RefCell::new(unsafe { hda::IntelHDA::new(address, vend_prod).expect("ihdad: failed to allocate device") }));
   device.borrow_mut().beep(20);
-  
-  Ok(ExitCode::SUCCESS)
 }
 
 ////#![deny(warnings)]
@@ -589,6 +603,7 @@ impl DriverHandler {
                         );
                     }
                 }
+                _ => std::todo!(),
             },
             PcidClientRequest::ReadConfig(offset) => {
                 let value = unsafe {
@@ -616,6 +631,7 @@ impl DriverHandler {
                 }
                 return PcidClientResponse::WriteConfig;
             }
+            _ => std::todo!(),
         }
     }
     fn handle_spawn(
@@ -719,7 +735,7 @@ fn handle_parsed_header(
         }
     }
 
-    println!("{}", string);
+    std::println!("{}", string);
 
     for driver in config.drivers.iter() {
         if let Some(class) = driver.class {
@@ -916,7 +932,7 @@ fn handle_parsed_header(
                     command.arg(&arg);
                 }
 
-                println!("PCID SPAWN {:?}", command);
+                std::println!("PCID SPAWN {:?}", command);
 
                 let (pcid_to_client_write, pcid_from_client_read) =
                     (Arc::clone(&TO_CLIENT), Arc::clone(&FROM_CLIENT));
@@ -950,6 +966,8 @@ fn handle_parsed_header(
 
                 // try to hook into spawning a separate function but not a separate command
 
+                // TODO: fix command issues
+                /*
                 match command.spawn() {
                     Ok(mut child) => {
                         let driver_handler = DriverHandler {
@@ -980,11 +998,13 @@ fn handle_parsed_header(
                     }
                     Err(err) => error!("pcid: failed to execute {:?}: {}", command, err),
                 }
+                */
             }
         }
     }
 }
-fn pci_main() {
+
+async fn pci_main() {
     let mut config = Config::default();
 
     let pci = Arc::new(Pci::new());
@@ -994,7 +1014,7 @@ fn pci_main() {
         pcie: match Pcie::new(Arc::clone(&pci)) {
             Ok(pcie) => Some(pcie),
             Err(error) => {
-                println!("Couldn't retrieve PCIe info, perhaps the kernel is not compiled with acpi? Using the PCI 3.0 configuration space instead. Error: {:?}", error);
+                std::println!("Couldn't retrieve PCIe info, perhaps the kernel is not compiled with acpi? Using the PCI 3.0 configuration space instead. Error: {:?}", error);
                 None
             }
         },
@@ -1003,12 +1023,13 @@ fn pci_main() {
 
     let pci = state.preferred_cfg_access();
 
-    println!("PCI BS/DV/FN VEND:DEVI CL.SC.IN.RV");
+    std::println!("PCI BS/DV/FN VEND:DEVI CL.SC.IN.RV");
 
     let mut bus_nums = vec![0];
     let mut bus_i = 0;
     'bus: while bus_i < bus_nums.len() {
         let bus_num = bus_nums[bus_i];
+        std::println!("BNum: {}", bus_num);
         bus_i += 1;
 
         let bus = PciBus { pci, num: bus_num };
