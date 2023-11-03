@@ -17,3 +17,14 @@ Currently in progress towards basic first goal of nightly Rust for x86_64 UEFI, 
   * [ ] `syscall::fmap`
   * [ ] `syscall::open`
   * [ ] `syscall::close`
+
+## Running
+
+* `cd hdaudio`
+* `cargo build --target x86_64-unknown-uefi`
+* `cd ..`
+* `./qemu.sh`
+* once inside QEMU
+* `FS0:`
+* `.\ihdad.efi`
+
