@@ -3,20 +3,20 @@ mod pcid;
 
 use pcid::*;
 use crate::state::*;
-use syscall::iopl;
-use std::error::Error;
-use std::process::ExitCode;
-use std::convert::TryFrom;
-use std::cell::RefCell;
+
+
+
+
+
 use pcid::pci::cap::CapabilityOffsetsIter;
 use pcid::pci::cap::CapabilitiesIter;
 use pcid::SubdriverArguments;
-use pcid::PciFeature;
-use pcid::SetFeatureInfo;
-use pcid::MsiSetFeatureInfo;
-use pcid::irq_helpers::allocate_single_interrupt_vector;
-use pcid::irq_helpers::read_bsp_apic_id;
-use pcid::PciFeatureInfo;
+
+
+
+
+
+
 use pcid::PcidServerHandle;
 
 #[cfg(not(target_arch = "x85_64"))]
@@ -153,7 +153,7 @@ let address = unsafe {
 	let vend_prod:u32 = ((pci_config.func.venid as u32) << 16) | (pci_config.func.devid as u32);
   println!("Makde vendor prod");
 
-	let device = unsafe { hda::IntelHDA::new(address, vend_prod).expect("ihdad: failed to allocate device") };
+	let _device = unsafe { hda::IntelHDA::new(address, vend_prod).expect("ihdad: failed to allocate device") };
   println!("Created intel hDA device");
  // device.borrow_mut().beep(20);
  // println!("Done beeping!");
@@ -306,27 +306,27 @@ let address = unsafe {
 //	// Daemonize
 //    redox_daemon::Daemon::new(daemon).expect("ihdad: failed to daemonize");
 //}
-use std::fs::{metadata, read_dir, File};
+use std::fs::{File};
 use std::io::prelude::*;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use std::{i64, thread};
+use std::{i64};
 
-use log::{debug, error, info, trace, warn};
+use log::{trace, warn};
 
 use pcid::config::Config;
-use pcid::pci::cap::Capability as PciCapability;
-use pcid::pci::func::{ConfigReader, ConfigWriter};
+
+
 use pcid::pci::{
     CfgAccess, Pci, PciBar, PciBus, PciClass, PciDev, PciFunc, PciHeader, PciHeaderError,
-    PciHeaderType, PciIter,
+    PciHeaderType,
 };
 use pcid::pcie::Pcie;
 
 use pcid::config;
 use pcid::driver_interface;
 use pcid::pci;
-use pcid::pcie;
+
 
 //#[derive(StructOpt)]
 //#[structopt(about)]
@@ -350,8 +350,8 @@ fn handle_parsed_header(
     dev_num: u8,
     func_num: u8,
     header: PciHeader,
-    pcid_to_write: Sender<Vec<u8>>,
-    pcid_from_read: Receiver<Vec<u8>>
+    _pcid_to_write: Sender<Vec<u8>>,
+    _pcid_from_read: Receiver<Vec<u8>>
 ) -> Vec<(DriverHandler, SubdriverArguments)> {
     let pci = state.preferred_cfg_access();
 
@@ -485,7 +485,7 @@ fn handle_parsed_header(
 
             // Set IRQ line to 9 if not set
             let mut irq;
-            let mut interrupt_pin;
+            let interrupt_pin;
 
             unsafe {
                 let mut data = pci.read(bus_num, dev_num, func_num, 0x3C);

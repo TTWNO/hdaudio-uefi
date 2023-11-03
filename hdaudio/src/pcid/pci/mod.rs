@@ -5,13 +5,13 @@ use std::sync::{Mutex, Once};
 use syscall::io::{Io as _, Pio};
 
 pub use self::bar::PciBar;
-pub use self::bus::{PciBus, PciBusIter};
+pub use self::bus::{PciBus};
 pub use self::class::PciClass;
-pub use self::dev::{PciDev, PciDevIter};
+pub use self::dev::{PciDev};
 pub use self::func::PciFunc;
 pub use self::header::{PciHeader, PciHeaderError, PciHeaderType};
 
-use log::info;
+
 
 mod bar;
 mod bus;

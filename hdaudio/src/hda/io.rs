@@ -1,7 +1,7 @@
 use core::cmp::PartialEq;
 use core::ops::{BitAnd, BitOr, Not};
 
-use core::ptr::{read_volatile, write_volatile};
+
 use core::ptr::{read_unaligned, write_unaligned};
 use core::mem::MaybeUninit;
 

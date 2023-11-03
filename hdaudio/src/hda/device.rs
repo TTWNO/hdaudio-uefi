@@ -624,7 +624,7 @@ impl IntelHDA {
 
 	*/
 
-	pub fn dump_codec(&self, codec:u8) -> String {
+	pub fn dump_codec(&self, _codec:u8) -> String {
 		let mut string = String::new();
 
 		for (_, widget) in self.widget_map.iter() {
@@ -984,9 +984,9 @@ impl IntelHDA {
 			Handle::StrBuf(ref mut strbuf, ref mut size) => {
 				let len = strbuf.len() as usize;
 				*size = match whence {
-					SEEK_SET => cmp::min(len, pos),
-					SEEK_CUR => cmp::max(0, cmp::min(len as isize, *size as isize + pos as isize)) as usize,
-					SEEK_END => cmp::max(0, cmp::min(len as isize,   len as isize + pos as isize)) as usize,
+					_SEEK_SET => cmp::min(len, pos),
+					_SEEK_CUR => cmp::max(0, cmp::min(len as isize, *size as isize + pos as isize)) as usize,
+					_SEEK_END => cmp::max(0, cmp::min(len as isize,   len as isize + pos as isize)) as usize,
 					_ => return Err(Error::new(ErrorKind::InvalidInput, "Input failed to process"))
 				};
 				Ok(Some(*size as isize))

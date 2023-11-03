@@ -17,42 +17,41 @@ fn with_pci_func_raw<T, F: FnOnce(&PciFunc) -> T>(
     function(&func)
 }
 
-use syscall::iopl;
-use std::error::Error;
-use std::process::ExitCode;
-use std::convert::TryFrom;
-use std::cell::RefCell;
-use crate::pcid::pci::cap::CapabilityOffsetsIter;
-use crate::pcid::pci::cap::CapabilitiesIter;
-use crate::pcid::SubdriverArguments;
-use crate::pcid::PciFeature;
-use crate::pcid::SetFeatureInfo;
-use crate::pcid::MsiSetFeatureInfo;
-use crate::pcid::irq_helpers::allocate_single_interrupt_vector;
-use crate::pcid::irq_helpers::read_bsp_apic_id;
-use crate::pcid::PciFeatureInfo;
-use crate::pcid::PcidServerHandle;
-use std::fs::{metadata, read_dir, File};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 use std::io::prelude::*;
-use std::process::Command;
+
 use std::sync::{Arc, Mutex};
-use std::{i64, thread};
+use std::{thread};
 
-use log::{debug, error, info, trace, warn};
 
-use crate::pcid::config::Config;
+
+
 use crate::pcid::pci::cap::Capability as PciCapability;
 use crate::pcid::pci::func::{ConfigReader, ConfigWriter};
 use crate::pcid::pci::{
-    CfgAccess, Pci, PciBar, PciBus, PciClass, PciDev, PciFunc, PciHeader, PciHeaderError,
-    PciHeaderType, PciIter,
+    CfgAccess, Pci, PciBus, PciDev, PciFunc, PciHeader,
 };
 use crate::pcid::pcie::Pcie;
 
 use crate::pcid::config;
 use crate::pcid::driver_interface;
-use crate::pcid::pci;
-use crate::pcid::pcie;
+
+
 
 pub struct DriverHandler {
     pub config: config::DriverConfig,
@@ -376,4 +375,4 @@ impl State {
     }
 }
 
-use crossbeam::channel::{Sender, Receiver, bounded, SendError, TryRecvError, RecvError};
+use crossbeam::channel::{Sender, Receiver};

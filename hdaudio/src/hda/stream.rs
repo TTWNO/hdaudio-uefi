@@ -364,7 +364,7 @@ impl Drop for StreamBuffer {
 	fn drop(&mut self) {
 		unsafe {
 			log::debug!("IHDA: Deallocating buffer.");
-      let page_aligned_size = (self.block_len * self.block_cnt).next_multiple_of(4096);
+      let _page_aligned_size = (self.block_len * self.block_cnt).next_multiple_of(4096);
 
       let layout = Layout::from_size_align(self.block_len * self.block_cnt, 4096).unwrap();
       unsafe {
