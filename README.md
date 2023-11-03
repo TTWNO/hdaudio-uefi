@@ -8,8 +8,11 @@ Currently in progress towards basic first goal:
 
 ## TODO
 
-* [ ] Emulate original `syscall::*` interfaces from original [`redox-drivers`](https://gitlab.redox-os.org/redox-os/drivers) repo.
+* [ ] Re-implement original `syscall::*` interfaces from original [`redox-drivers`](https://gitlab.redox-os.org/redox-os/drivers) repo.
   * [ ] `syscall::physmap`
   * [ ] `syscall::physalloc`
   * [ ] `syscall::physfree`
   * [ ] `syscall::setrens`
+  * [ ] `syscall::fmap`
+  * [ ] `syscall::open`
+  * [ ] `syscall::close`
