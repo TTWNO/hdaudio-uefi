@@ -1,10 +1,11 @@
 # `hdaudio-uefi`
 
 An attempt to port the RedoxOS HD Audio driver to pure Rust, with no standard library.
-Currently in progress towards basic first goal:
+Currently in progress towards basic first goal of nightly Rust for x86_64 UEFI, which has part of the standard library, then work to port that to `no_std`:
 
 * [ ] `x86_64-unknown-uefi` (nightly, with std)
-* [ ] `x86_64-unknwon-unknown` (`no_std`)
+* [ ] `x86_64-unknown-uefi` (stable, `no_std`)
+* [ ] `x86_64-unknwon-unknown` (`no_std`, stable, possibly `no_alloc`?)
 
 ## TODO
 
