@@ -21,7 +21,7 @@ Currently in progress towards basic first goal of nightly Rust for x86_64 UEFI, 
 ## Running
 
 * `cd hdaudio`
-* `cargo build --target x86_64-unknown-uefi`
+* `cargo +nightly build --target x86_64-unknown-uefi`
 * `cd ..`
 * `./qemu.sh`
 * once inside QEMU
