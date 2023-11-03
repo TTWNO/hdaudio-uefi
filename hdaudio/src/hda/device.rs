@@ -5,7 +5,6 @@ use std::alloc::Layout;
 use std::io::Error;
 use std::io::ErrorKind;
 use std::cmp;
-use std::collections::HashMap;
 use std::fmt::Write;
 use std::str;
 use std::collections::BTreeMap;
@@ -136,7 +135,7 @@ pub struct IntelHDA {
 	outputs: Vec<WidgetAddr>,
 	inputs: Vec<WidgetAddr>,
 
-	widget_map: HashMap<WidgetAddr, HDANode>,
+	widget_map: BTreeMap<WidgetAddr, HDANode>,
 
 	output_pins: Vec<WidgetAddr>,
 	input_pins: Vec<WidgetAddr>,
@@ -171,7 +170,6 @@ impl IntelHDA {
     let cmd_ptr: *mut u8 = unsafe { alloc(cmd_layout) };
 
 		println!("Phys: {:016X}", cmd_ptr as usize);
-    println!("Try to create module struct");
 		let mut module = IntelHDA {
 			vend_prod: vend_prod,
 			base: base,
@@ -181,7 +179,7 @@ impl IntelHDA {
 
 			beep_addr: (0,0),
 
-			widget_map: HashMap::<WidgetAddr, HDANode>::new(),
+			widget_map: BTreeMap::new(),
 
 			codecs: Vec::<CodecAddr>::new(),
 
@@ -202,7 +200,6 @@ impl IntelHDA {
 			handles: Mutex::new(BTreeMap::new()),
 			next_id: AtomicUsize::new(0),
 		};
-    println!("Made module struct");
 
     println!("[HDA] init");
 		module.init();
@@ -256,11 +253,13 @@ impl IntelHDA {
 	}
 
 	pub fn read_node(&mut self, addr: WidgetAddr) -> HDANode {
+    println!("[HDA_NODE] start");
 		let mut node = HDANode::new();
 		let mut temp:u64;
 
 		node.addr = addr;
 
+    println!("[HDA_NODE] cmd12");
 		temp = self.cmd.cmd12( addr, 0xF00, 0x04);
 
 		node.subnode_count = (temp & 0xff) as u16;
@@ -269,13 +268,16 @@ impl IntelHDA {
 		if addr == (0,0) {
 			return node;
 		}
+    println!("[HDA_NODE] cmd12.2");
 		temp = self.cmd.cmd12(addr, 0xF00, 0x04);
 
 		node.function_group_type = (temp & 0xff) as u8;
 
+    println!("[HDA_NODE] cmd12.3");
 		temp = self.cmd.cmd12(addr, 0xF00, 0x09);
 		node.capabilities = temp as u32;
 
+    println!("[HDA_NODE] cmd12.4");
 		temp = self.cmd.cmd12(addr, 0xF00, 0x0E);
 
 		node.conn_list_len = (temp & 0xFF) as u8;
@@ -348,6 +350,7 @@ impl IntelHDA {
 	pub fn enumerate(&mut self) {
 		self.output_pins.clear();
 		self.input_pins.clear();
+    println!("Pins cleared!");
 
 		let codec:u8 = 0;
 
