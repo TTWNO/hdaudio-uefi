@@ -1,19 +1,24 @@
 #![allow(dead_code)]
 
 use std::cmp;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str;
-use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::io::ErrorKind;
+use std::io::Result;
+use std::io::Error;
+use core::alloc::Layout;
+use std::alloc::alloc;
 
-use syscall::error::{Error, EACCES, EBADF, Result, EINVAL};
-use syscall::flag::{SEEK_SET, SEEK_CUR, SEEK_END};
-use syscall::io::{Mmio, Io};
-use syscall::scheme::SchemeBlockMut;
+//use syscall::error::{Error, ErrorKind::PermissionsDenied, "No access", ErrorKind::Other, "Bad F", ErrorKind::InvalidInput, "input failed to process"};
+//use syscall::flag::{SEEK_SET, SEEK_CUR, SEEK_END};
+//use syscall::io::{Mmio, Io};
+//use syscall::scheme::SchemeBlockMut;
 
 use spin::Mutex;
 
+use crate::hda::io::{Mmio, Io};
 use super::BufferDescriptorListEntry;
 use super::common::*;
 use super::StreamDescriptorRegs;
@@ -130,7 +135,7 @@ pub struct IntelHDA {
 	outputs: Vec<WidgetAddr>,
 	inputs: Vec<WidgetAddr>,
 
-	widget_map: HashMap<WidgetAddr, HDANode>,
+	widget_map: BTreeMap<WidgetAddr, HDANode>,
 
 	output_pins: Vec<WidgetAddr>,
 	input_pins: Vec<WidgetAddr>,
@@ -151,37 +156,33 @@ pub struct IntelHDA {
 
 impl IntelHDA {
 	pub unsafe fn new(base: usize, vend_prod:u32) -> Result<Self> {
+    println!("REGS");
 		let regs = &mut *(base as *mut Regs);
 
-		let buff_desc_phys =
-			syscall::physalloc(0x1000)
-				.expect("Could not allocate physical memory for buffer descriptor list.");
+    let buf_layout = Layout::new::<[BufferDescriptorListEntry;256]>();
+		let buff_desc_phys: *mut u8 = unsafe { alloc(buf_layout) };
+    let buff_desc_virt: usize = buff_desc_phys as usize;
+		let buff_desc = &mut *(buff_desc_phys as *mut [BufferDescriptorListEntry;256]);
+    println!("BUF");
 
-		let buff_desc_virt =
-			common::physmap(buff_desc_phys, 0x1000, common::Prot::RW, common::MemoryType::Uncacheable)
-				.expect("ihdad: failed to map address for buffer descriptor list.") as usize;
+    let cmd_layout = Layout::from_size_align(0x1000, 0x1000).unwrap();
+    let cmd_buff_address: *mut u8 = unsafe { alloc(cmd_layout) };
+    let cmd_buff_virt: usize = cmd_buff_address as usize;
+    println!("CMDBUF");
 
-		log::debug!("Virt: {:016X}, Phys: {:016X}", buff_desc_virt, buff_desc_phys);
+		//println!("Virt: {:016X}, Phys: {:016X}", buff_desc_virt, buff_desc_phys);
+		//println!("Virt: {:016X}, Phys: {:016X}", cmd_buff_virt, cmd_buff_address);
 
-		let buff_desc = &mut *(buff_desc_virt as *mut [BufferDescriptorListEntry;256]);
-
-		let cmd_buff_address =
-			syscall::physalloc(0x1000)
-				.expect("Could not allocate physical memory for CORB and RIRB.");
-
-		let cmd_buff_virt = common::physmap(cmd_buff_address, 0x1000, common::Prot::RW, common::MemoryType::Uncacheable).expect("ihdad: failed to map address for CORB/RIRB buff") as usize;
-
-		log::debug!("Virt: {:016X}, Phys: {:016X}", cmd_buff_virt, cmd_buff_address);
 		let mut module = IntelHDA {
 			vend_prod: vend_prod,
 			base: base,
 			regs: regs,
 
-			cmd: CommandBuffer::new(base + COMMAND_BUFFER_OFFSET, cmd_buff_address, cmd_buff_virt),
+			cmd: CommandBuffer::new(base + COMMAND_BUFFER_OFFSET, cmd_buff_virt, cmd_buff_virt),
 
 			beep_addr: (0,0),
 
-			widget_map: HashMap::<WidgetAddr, HDANode>::new(),
+			widget_map: BTreeMap::<WidgetAddr, HDANode>::new(),
 
 			codecs: Vec::<CodecAddr>::new(),
 
@@ -192,7 +193,7 @@ impl IntelHDA {
 			input_pins: Vec::<WidgetAddr>::new(),
 
 			buff_desc: buff_desc,
-			buff_desc_phys: buff_desc_phys,
+			buff_desc_phys: buff_desc_virt,
 
 			output_streams: Vec::<OutputStream>::new(),
 
@@ -345,7 +346,7 @@ impl IntelHDA {
 
 		let root = self.read_node((codec,0));
 
-		log::debug!("{}", root);
+		println!("{}", root);
 
 		let root_count = root.subnode_count;
 		let root_start = root.subnode_start;
@@ -353,7 +354,7 @@ impl IntelHDA {
 		//FIXME: So basically the way this is set up is to only support one codec and hopes the first one is an audio
 		for i in 0..root_count {
 			let afg = self.read_node((codec, root_start + i));
-			log::debug!("{}", afg);
+			println!("{}", afg);
 			let afg_count = afg.subnode_count;
 			let afg_start = afg.subnode_start;
 
@@ -375,7 +376,7 @@ impl IntelHDA {
 					_ => {},
 				}
 
-				log::debug!("{}", widget);
+				println!("{}", widget);
 				self.widget_map.insert(widget.addr(), widget);
 			}
 		}
@@ -468,14 +469,14 @@ impl IntelHDA {
 	pub fn configure(&mut self) {
 		let outpin = self.find_best_output_pin().expect("IHDA: No output pins?!");
 
-		log::debug!("Best pin: {:01X}:{:02X}", outpin.0, outpin.1);
+		println!("Best pin: {:01X}:{:02X}", outpin.0, outpin.1);
 
 		let path = self.find_path_to_dac(outpin).unwrap();
 
 		let dac = *path.last().unwrap();
 		let pin = *path.first().unwrap();
 
-		log::debug!("Path to DAC: {:X?}", path);
+		println!("Path to DAC: {:X?}", path);
 
 		// Set power state 0 (on) for all widgets in path
 		for &addr in &path {
@@ -493,8 +494,8 @@ impl IntelHDA {
 
 		self.update_sound_buffers();
 
-		log::debug!("Supported Formats: {:08X}", self.get_supported_formats((0,0x1)));
-		log::debug!("Capabilities: {:08X}", self.get_capabilities(path[0]));
+		println!("Supported Formats: {:08X}", self.get_supported_formats((0,0x1)));
+		println!("Capabilities: {:08X}", self.get_capabilities(path[0]));
 
 		// Create output stream
 		let output = self.get_output_stream_descriptor(0).unwrap();
@@ -532,7 +533,7 @@ impl IntelHDA {
 				let output = false;
 				let input = true;
 				self.set_amplifier_gain_mute(addr, output, input, left, right, index, mute, in_gain);
-				log::debug!("Set {:X?} input gain to 0x{:X}", addr, in_gain);
+				println!("Set {:X?} input gain to 0x{:X}", addr, in_gain);
 			}
 
 			// Check for output amp
@@ -544,19 +545,19 @@ impl IntelHDA {
 				let output = true;
 				let input = false;
 				self.set_amplifier_gain_mute(addr, output, input, left, right, index, mute, out_gain);
-				log::debug!("Set {:X?} output gain to 0x{:X}", addr, out_gain);
+				println!("Set {:X?} output gain to 0x{:X}", addr, out_gain);
 			}
 		}
 
 		//TODO: implement hda-verb?
 
 		output.run();
-		log::debug!("Waiting for output 0 to start running...");
+		println!("Waiting for output 0 to start running...");
 		while output.control() & (1 << 1) == 0 {
 			//TODO: relax
 		}
 
-		log::debug!("Output 0 CONTROL {:#X} STATUS {:#X} POS {:#X}", output.control(), output.status(), output.link_position());
+		println!("Output 0 CONTROL {:#X} STATUS {:#X} POS {:#X}", output.control(), output.status(), output.link_position());
 	}
 	/*
 
@@ -564,10 +565,10 @@ impl IntelHDA {
 
 		let outpin = self.find_best_output_pin().expect("IHDA: No output pins?!");
 
-		log::debug!("Best pin: {:01X}:{:02X}", outpin.0, outpin.1);
+		println!("Best pin: {:01X}:{:02X}", outpin.0, outpin.1);
 
 		let path = self.find_path_to_dac(outpin).unwrap();
-		log::debug!("Path to DAC: {:X?}", path);
+		println!("Path to DAC: {:X?}", path);
 
 		// Pin enable
 		self.cmd.cmd12((0,0xC), 0x707, 0x40);
@@ -581,8 +582,8 @@ impl IntelHDA {
 		self.update_sound_buffers();
 
 
-		log::debug!("Supported Formats: {:08X}", self.get_supported_formats((0,0x1)));
-		log::debug!("Capabilities: {:08X}", self.get_capabilities((0,0x1)));
+		println!("Supported Formats: {:08X}", self.get_supported_formats((0,0x1)));
+		println!("Capabilities: {:08X}", self.get_capabilities((0,0x1)));
 
 		let output = self.get_output_stream_descriptor(0).unwrap();
 
@@ -665,7 +666,7 @@ impl IntelHDA {
 		}
 
 		let statests = self.regs.statests.read();
-		log::debug!("Statests: {:04X}", statests);
+		println!("Statests: {:04X}", statests);
 
 		for i in 0..15 {
 			if (statests >> i) & 0x1 == 1 {
@@ -698,11 +699,11 @@ impl IntelHDA {
 
 	pub fn info(&self) {
 		log::info!("Intel HD Audio Version {}.{}", self.regs.vmaj.read(), self.regs.vmin.read());
-		log::debug!("IHDA: Input Streams: {}", self.num_input_streams());
-		log::debug!("IHDA: Output Streams: {}", self.num_output_streams());
-		log::debug!("IHDA: Bidirectional Streams: {}", self.num_bidirectional_streams());
-		log::debug!("IHDA: Serial Data Outputs: {}", self.num_serial_data_out());
-		log::debug!("IHDA: 64-Bit: {}", self.regs.gcap.read() & 1 == 1);
+		println!("IHDA: Input Streams: {}", self.num_input_streams());
+		println!("IHDA: Output Streams: {}", self.num_output_streams());
+		println!("IHDA: Bidirectional Streams: {}", self.num_bidirectional_streams());
+		println!("IHDA: Serial Data Outputs: {}", self.num_serial_data_out());
+		println!("IHDA: 64-Bit: {}", self.regs.gcap.read() & 1 == 1);
 	}
 
 	fn get_input_stream_descriptor(&self, index: usize) -> Option<&'static mut StreamDescriptorRegs> {
@@ -848,13 +849,13 @@ impl IntelHDA {
 	}
 
 	fn validate_path(&mut self, path: &Vec<&str>) -> bool {
-		log::debug!("Path: {:?}", path);
+		println!("Path: {:?}", path);
 		let mut it = path.iter();
 		match it.next() {
 			Some(card_str) if (*card_str).starts_with("card") => {
 				match usize::from_str_radix(&(*card_str)[4..], 10) {
 					Ok(card_num) => {
-						log::debug!("Card# {}", card_num);
+						println!("Card# {}", card_num);
 						match it.next() {
 							Some(codec_str) if (*codec_str).starts_with("codec#") => {
 								match usize::from_str_radix(&(*codec_str)[6..], 10) {
@@ -870,7 +871,7 @@ impl IntelHDA {
 							Some(pcmout_str) if (*pcmout_str).starts_with("pcmout") => {
 								match usize::from_str_radix(&(*pcmout_str)[6..], 10) {
 									Ok(pcmout_num) => {
-										log::debug!("pcmout {}", pcmout_num);
+										println!("pcmout {}", pcmout_num);
 										true
 									},
 									_ => false,
@@ -879,7 +880,7 @@ impl IntelHDA {
 							Some(pcmin_str) if (*pcmin_str).starts_with("pcmin") => {
 								match usize::from_str_radix(&(*pcmin_str)[6..], 10) {
 									Ok(pcmin_num) => {
-										log::debug!("pcmin {}", pcmin_num);
+										println!("pcmin {}", pcmin_num);
 										true
 									},
 									_ => false,
@@ -907,7 +908,8 @@ impl Drop for IntelHDA {
 	}
 }
 
-impl SchemeBlockMut for IntelHDA {
+//impl SchemeBlockMut for IntelHDA {
+impl IntelHDA {
 	fn open(&mut self, path: &str, _flags: usize, uid: u32, _gid: u32) -> Result<Option<usize>> {
 		//let path: Vec<&str>;
 		/*
@@ -915,10 +917,10 @@ impl SchemeBlockMut for IntelHDA {
 			Ok(p)  => {
 					path = p.split("/").collect();
 					if !self.validate_path(&path) {
-						return Err(Error::new(EINVAL));
+						return Err(Error::new(ErrorKind::InvalidInput, "input failed to process"));
 
 				},
-			Err(_) => {return Err(Error::new(EINVAL));},
+			Err(_) => {return Err(Error::new(ErrorKind::InvalidInput, "input failed to process"));},
 		}*/
 
 		// TODO:
@@ -932,13 +934,13 @@ impl SchemeBlockMut for IntelHDA {
 			self.handles.lock().insert(id, handle);
 			Ok(Some(id))
 		} else {
-			Err(Error::new(EACCES))
+			Err(Error::new(ErrorKind::PermissionDenied, "No access"))
 		}
 	}
 
 	fn read(&mut self, id: usize, buf: &mut [u8]) -> Result<Option<usize>> {
         let mut handles = self.handles.lock();
-        match *handles.get_mut(&id).ok_or(Error::new(EBADF))? {
+        match *handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other, "Unfindable"))? {
 			Handle::StrBuf(ref strbuf, ref mut size) => {
 				let mut i = 0;
 				while i < buf.len() && *size < strbuf.len() {
@@ -948,16 +950,16 @@ impl SchemeBlockMut for IntelHDA {
 				}
 				Ok(Some(i))
 			},
-			_ => Err(Error::new(EBADF)),
+			_ => Err(Error::new(ErrorKind::Other, "Bad F")),
 		}
 	}
 
 	fn write(&mut self, id: usize, buf: &[u8]) -> Result<Option<usize>> {
 		let index = {
 	        let mut handles = self.handles.lock();
-	        match handles.get_mut(&id).ok_or(Error::new(EBADF))? {
+	        match handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other, "unfindable"))? {
 				Handle::Todo => 0,
-				_ => return Err(Error::new(EBADF)),
+				_ => return Err(Error::new(ErrorKind::Other, "Bad F")),
 			}
 		};
 
@@ -969,25 +971,25 @@ impl SchemeBlockMut for IntelHDA {
 	fn seek(&mut self, id: usize, pos: isize, whence: usize) -> Result<Option<isize>> {
 	    let pos = pos as usize;
 		let mut handles = self.handles.lock();
-		match *handles.get_mut(&id).ok_or(Error::new(EBADF))? {
+		match *handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other, "unfindable"))? {
 			Handle::StrBuf(ref mut strbuf, ref mut size) => {
 				let len = strbuf.len() as usize;
 				*size = match whence {
 					SEEK_SET => cmp::min(len, pos),
 					SEEK_CUR => cmp::max(0, cmp::min(len as isize, *size as isize + pos as isize)) as usize,
 					SEEK_END => cmp::max(0, cmp::min(len as isize,   len as isize + pos as isize)) as usize,
-					_ => return Err(Error::new(EINVAL))
+					_ => return Err(Error::new(ErrorKind::InvalidInput, "input failed to process"))
 				};
 				Ok(Some(*size as isize))
 			},
 
-			_ => Err(Error::new(EINVAL)),
+			_ => Err(Error::new(ErrorKind::InvalidInput, "input failed to process")),
         }
 	}
 
     fn fpath(&mut self, id: usize, buf: &mut [u8]) -> Result<Option<usize>> {
         let mut handles = self.handles.lock();
-        let _handle = handles.get_mut(&id).ok_or(Error::new(EBADF))?;
+        let _handle = handles.get_mut(&id).ok_or(Error::new(ErrorKind::Other, "Unfindable"))?;
 
         let mut i = 0;
         let scheme_path = b"audiohw:";
@@ -1000,6 +1002,6 @@ impl SchemeBlockMut for IntelHDA {
 
 	fn close(&mut self, id: usize) -> Result<Option<usize>> {
 		let mut handles = self.handles.lock();
-    	handles.remove(&id).ok_or(Error::new(EBADF)).and(Ok(Some(0)))
+    	handles.remove(&id).ok_or(Error::new(ErrorKind::Other, "unfindable")).and(Ok(Some(0)))
 	}
 }

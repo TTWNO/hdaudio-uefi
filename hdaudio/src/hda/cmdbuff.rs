@@ -1,5 +1,6 @@
-use syscall::io::{Io, Mmio};
+//use syscall::io::{Io, Mmio};
 
+use crate::hda::io::{Io, Mmio};
 use super::common::*;
 
 // CORBCTL
