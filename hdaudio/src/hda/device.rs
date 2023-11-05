@@ -157,9 +157,8 @@ pub struct IntelHDA {
 impl IntelHDA {
 	pub unsafe fn new(base: usize, vend_prod:u32) -> Result<Self, Error> {
 		let regs = &mut *(base as *mut Regs);
-    let buf_layout = Layout::new::<[BufferDescriptorListEntry;256]>();
 
-    
+    let buf_layout = Layout::new::<[BufferDescriptorListEntry;256]>();
 		let buff_desc_phys: *mut u8 = unsafe { alloc(buf_layout) };
 
 		println!("Phys: {:016X}", buff_desc_phys as usize);
@@ -201,23 +200,17 @@ impl IntelHDA {
 			next_id: AtomicUsize::new(0),
 		};
 
-    println!("[HDA] init");
 		module.init();
 
-    println!("[HDA] info");
 		module.info();
-    println!("[HDA] enumerate");
 		module.enumerate();
 
-    println!("[HDA] configure");
 		module.configure();
-		println!("IHDA: Initialization finished.");
 		Ok(module)
 
 	}
 
 	pub fn init(&mut self) -> bool {
-    println!("[HDA_INIT] reset controller");
 		self.reset_controller();
 
 		let use_immediate_command_interface = match self.vend_prod {
@@ -226,9 +219,7 @@ impl IntelHDA {
 			_ => true,
 		};
 
-    println!("[HDA_INIT] Command init");
 		self.cmd.init(use_immediate_command_interface);
-    println!("[HDA_INIT] Init interrupts");
 		self.init_interrupts();
 
 		true
@@ -253,13 +244,12 @@ impl IntelHDA {
 	}
 
 	pub fn read_node(&mut self, addr: WidgetAddr) -> HDANode {
-    println!("[HDA_NODE] start");
+    println!("READ NODE!");
 		let mut node = HDANode::new();
 		let mut temp:u64;
 
 		node.addr = addr;
 
-    println!("[HDA_NODE] cmd12");
 		temp = self.cmd.cmd12( addr, 0xF00, 0x04);
 
 		node.subnode_count = (temp & 0xff) as u16;
@@ -268,16 +258,13 @@ impl IntelHDA {
 		if addr == (0,0) {
 			return node;
 		}
-    println!("[HDA_NODE] cmd12.2");
 		temp = self.cmd.cmd12(addr, 0xF00, 0x04);
 
 		node.function_group_type = (temp & 0xff) as u8;
 
-    println!("[HDA_NODE] cmd12.3");
 		temp = self.cmd.cmd12(addr, 0xF00, 0x09);
 		node.capabilities = temp as u32;
 
-    println!("[HDA_NODE] cmd12.4");
 		temp = self.cmd.cmd12(addr, 0xF00, 0x0E);
 
 		node.conn_list_len = (temp & 0xFF) as u8;
@@ -292,6 +279,7 @@ impl IntelHDA {
 	}
 
 	pub fn node_get_connection_list(&mut self, node: &HDANode) -> Vec<WidgetAddr> {
+    println!("NODE CONNECTION LIST!");
 		let len_field: u8 = (self.cmd.cmd12(node.addr, 0xF00, 0x0E) & 0xFF) as u8;
 
 		// Highest bit is if addresses are represented in longer notation
@@ -305,7 +293,6 @@ impl IntelHDA {
 		let mut list = Vec::<WidgetAddr>::new();
 
 		while current < count {
-
 			let response: u32 = (self.cmd.cmd12(node.addr, 0xF02, current) & 0xFFFFFFFF) as u32;
 
 			if use_long_addr {
@@ -357,11 +344,22 @@ impl IntelHDA {
 		let root = self.read_node((codec,0));
 
 		println!("{}", root);
+    println!("======================");
+    println!("======================");
+    println!("======================");
+    println!("======================");
+    println!("======================");
 
 		let root_count = root.subnode_count;
 		let root_start = root.subnode_start;
 
 		//FIXME: So basically the way this is set up is to only support one codec and hopes the first one is an audio
+    println!("ROOT COUNT: {}", root_count);
+    println!("======================");
+    println!("======================");
+    println!("======================");
+    println!("======================");
+    println!("======================");
 		for i in 0..root_count {
 			let afg = self.read_node((codec, root_start + i));
 			println!("{}", afg);
