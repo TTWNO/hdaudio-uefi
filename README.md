@@ -28,3 +28,13 @@ Currently in progress towards basic first goal of nightly Rust for x86_64 UEFI, 
 * `FS0:`
 * `.\ihdad.efi`
 
+## Current Problems
+
+* Gets caught on `cmdbuff.rs:282`
+  * Reads forever.
+  * Writes appear to get through when `-device intel-hda,debug=5` is set.
+  * Also tried with `redoxos`'s own instructions during boot, which uses `-device ich9-intel-hda,debug=5`, with no avail.
+  * But reading back is never the expected value.
+  * Debug shows error with `addressed non-existing codec`, which does not happen on RedoxOS's live image.
+  * It could have something to do with IRQs, but I'm not entirely sure.
+
