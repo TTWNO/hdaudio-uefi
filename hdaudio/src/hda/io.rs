@@ -38,8 +38,9 @@ impl<T> Io for Mmio<T> where T: Copy + PartialEq + BitAnd<Output = T> + BitOr<Ou
 
     fn read(&self) -> T {
         unsafe { 
-          let ptr = self.value;
-          read_unaligned(ptr.as_ptr())
+          self.value.assume_init()
+          //let ptr = self.value;
+          //read_unaligned(ptr.as_ptr())
         }
     }
 
