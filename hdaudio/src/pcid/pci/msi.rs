@@ -4,7 +4,7 @@ use super::bar::PciBar;
 pub use super::cap::{MsiCapability, MsixCapability};
 use super::func::{ConfigReader, ConfigWriter};
 
-use syscall::{Io, Mmio};
+use crate::hda::io::{Io, Mmio};
 
 impl MsiCapability {
     pub const MC_PVT_CAPABLE_BIT: u16 = 1 << 8;
