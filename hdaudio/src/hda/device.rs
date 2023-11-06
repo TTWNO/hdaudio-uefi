@@ -9,7 +9,7 @@ use std::io::ErrorKind;
 use std::io::Result;
 use std::io::Error;
 use core::alloc::Layout;
-use std::alloc::alloc;
+use std::alloc::alloc_zeroed;
 
 //use syscall::error::{Error, ErrorKind::PermissionsDenied, "No access", ErrorKind::Other, "Bad F", ErrorKind::InvalidInput, "input failed to process"};
 //use syscall::flag::{SEEK_SET, SEEK_CUR, SEEK_END};
@@ -159,14 +159,14 @@ impl IntelHDA {
     println!("REGS");
 		let regs = &mut *(base as *mut Regs);
 
-    let buf_layout = Layout::new::<[BufferDescriptorListEntry;256]>();
-		let buff_desc_phys: *mut u8 = unsafe { alloc(buf_layout) };
+    let buf_layout = Layout::from_size_align(0x1000, 0x1000).unwrap();
+		let buff_desc_phys: *mut u8 = unsafe { alloc_zeroed(buf_layout) };
     let buff_desc_virt: usize = buff_desc_phys as usize;
 		let buff_desc = &mut *(buff_desc_phys as *mut [BufferDescriptorListEntry;256]);
     println!("BUF");
 
     let cmd_layout = Layout::from_size_align(0x1000, 0x1000).unwrap();
-    let cmd_buff_address: *mut u8 = unsafe { alloc(cmd_layout) };
+    let cmd_buff_address: *mut u8 = unsafe { alloc_zeroed(cmd_layout) };
     let cmd_buff_virt: usize = cmd_buff_address as usize;
     println!("CMDBUF");
 
