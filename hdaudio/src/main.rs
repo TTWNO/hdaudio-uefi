@@ -156,8 +156,7 @@ let address = unsafe {
 
 	let mut device = unsafe { hda::IntelHDA::new(address, vend_prod).expect("ihdad: failed to allocate device") };
   println!("Created intel hDA device");
-  device.borrow_mut().beep(20);
-  println!("Done beeping!");
+  // TODO: Now what?
 }
 
 ////#![deny(warnings)]
