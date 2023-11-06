@@ -3,6 +3,7 @@ mod pcid;
 
 use pcid::*;
 use crate::state::*;
+use std::borrow::BorrowMut;
 
 
 
@@ -153,10 +154,10 @@ let address = unsafe {
 	let vend_prod:u32 = ((pci_config.func.venid as u32) << 16) | (pci_config.func.devid as u32);
   println!("Makde vendor prod");
 
-	let _device = unsafe { hda::IntelHDA::new(address, vend_prod).expect("ihdad: failed to allocate device") };
+	let mut device = unsafe { hda::IntelHDA::new(address, vend_prod).expect("ihdad: failed to allocate device") };
   println!("Created intel hDA device");
- // device.borrow_mut().beep(20);
- // println!("Done beeping!");
+  device.borrow_mut().beep(20);
+  println!("Done beeping!");
 }
 
 ////#![deny(warnings)]
