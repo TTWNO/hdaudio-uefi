@@ -30,11 +30,22 @@ Currently in progress towards basic first goal of nightly Rust for x86_64 UEFI, 
 
 ## Current Problems
 
-* Gets caught on `cmdbuff.rs:282`
-  * Reads forever.
-  * Writes appear to get through when `-device intel-hda,debug=5` is set.
-  * Also tried with `redoxos`'s own instructions during boot, which uses `-device ich9-intel-hda,debug=5`, with no avail.
-  * But reading back is never the expected value.
-  * Debug shows error with `addressed non-existing codec`, which does not happen on RedoxOS's live image.
-  * It could have something to do with IRQs, but I'm not entirely sure.
+* Running on real hardware (Framework, Intel 11th Gen)
+  * Program exists after returning from `IntelHDA::configure()`
+  * I assume this is because something is overwriting a stack pointer or something?
+  * Or maybe tthere's a bigger issue?
+  * No leads so far.
+  * Something interesting is that the capabilities register appears to show 0x0 on real hardware, so maybe that's related.
+
+## Previous Problems
+
+* [X] Could read, but not write values.
+  * Fixed by using direct memory access instead of memory-mapped IO.
+* [X] Could not read updates to RIRBWP address (in QEMU).
+  * Fixed in QEMU by adding the: `-device ich9-intel-hda -device hda-duplex`
+* [X] Random crashes
+  * Fixed by removing `syscall::*` functions and replacing with `std::` functions, where possible.
+  * `HashMap -> BTreeMap`: `HashMap`s instantly crash the program.
+* [ ] 
+
 
