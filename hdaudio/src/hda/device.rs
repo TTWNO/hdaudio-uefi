@@ -156,19 +156,19 @@ pub struct IntelHDA {
 
 impl IntelHDA {
 	pub unsafe fn new(base: usize, vend_prod:u32) -> Result<Self> {
-    println!("REGS");
+    //println!("REGS");
 		let regs = &mut *(base as *mut Regs);
 
     let buf_layout = Layout::from_size_align(0x1000, 0x1000).unwrap();
 		let buff_desc_phys: *mut u8 = unsafe { alloc_zeroed(buf_layout) };
     let buff_desc_virt: usize = buff_desc_phys as usize;
 		let buff_desc = &mut *(buff_desc_phys as *mut [BufferDescriptorListEntry;256]);
-    println!("BUF");
+    //println!("BUF");
 
     let cmd_layout = Layout::from_size_align(0x1000, 0x1000).unwrap();
     let cmd_buff_address: *mut u8 = unsafe { alloc_zeroed(cmd_layout) };
     let cmd_buff_virt: usize = cmd_buff_address as usize;
-    println!("CMDBUF");
+    //println!("CMDBUF");
 
 		//println!("Virt: {:016X}, Phys: {:016X}", buff_desc_virt, buff_desc_phys);
 		//println!("Virt: {:016X}, Phys: {:016X}", cmd_buff_virt, cmd_buff_address);
@@ -698,12 +698,12 @@ impl IntelHDA {
 	}
 
 	pub fn info(&self) {
-		log::info!("Intel HD Audio Version {}.{}", self.regs.vmaj.read(), self.regs.vmin.read());
-		println!("IHDA: Input Streams: {}", self.num_input_streams());
-		println!("IHDA: Output Streams: {}", self.num_output_streams());
-		println!("IHDA: Bidirectional Streams: {}", self.num_bidirectional_streams());
-		println!("IHDA: Serial Data Outputs: {}", self.num_serial_data_out());
-		println!("IHDA: 64-Bit: {}", self.regs.gcap.read() & 1 == 1);
+		//log::info!("Intel HD Audio Version {}.{}", self.regs.vmaj.read(), self.regs.vmin.read());
+		//println!("IHDA: Input Streams: {}", self.num_input_streams());
+		//println!("IHDA: Output Streams: {}", self.num_output_streams());
+		//println!("IHDA: Bidirectional Streams: {}", self.num_bidirectional_streams());
+		//println!("IHDA: Serial Data Outputs: {}", self.num_serial_data_out());
+		//println!("IHDA: 64-Bit: {}", self.regs.gcap.read() & 1 == 1);
 	}
 
 	fn get_input_stream_descriptor(&self, index: usize) -> Option<&'static mut StreamDescriptorRegs> {
