@@ -48,6 +48,7 @@ Currently in progress towards basic first goal of nightly Rust for x86_64 UEFI, 
   * `HashMap -> BTreeMap`: `HashMap`s instantly crash the program.
 * [ ] Leaving the `HdaDevice::configure()` function caused an instant crash.
 	* This is confirmed as due to the `drop(...)` implementation of the `path` variable causing the crash. If the `drop()` is done early and explicitly, it crashes early.
+	* It is not the `Vec<_>` or `(u8, u16)` drop impls that are causing this.... Is there a custom drop somewhere?
+	* The value also appears to change midway through. Reading the value twice shows two different values [(0,0),(0,10)], then [(0,0),(0,0)] unsure what that is. Probably some memory magic I'm unaware of.
 	* Unknown how to fix.
-
 
