@@ -46,6 +46,8 @@ Currently in progress towards basic first goal of nightly Rust for x86_64 UEFI, 
 * [X] Random crashes
   * Fixed by removing `syscall::*` functions and replacing with `std::` functions, where possible.
   * `HashMap -> BTreeMap`: `HashMap`s instantly crash the program.
-* [ ] 
+* [ ] Leaving the `HdaDevice::configure()` function caused an instant crash.
+	* This is confirmed as due to the `drop(...)` implementation of the `path` variable causing the crash. If the `drop()` is done early and explicitly, it crashes early.
+	* Unknown how to fix.
 
 
