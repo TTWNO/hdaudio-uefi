@@ -550,6 +550,10 @@ impl IntelHDA {
 				println!("Set {:X?} output gain to 0x{:X}", addr, out_gain);
 			}
 		}
+		println!("{:?}", path);
+		println!("Try to drop path");
+		drop(path);
+		println!("Dropping path did nothing");
 
 		//TODO: implement hda-verb?
 

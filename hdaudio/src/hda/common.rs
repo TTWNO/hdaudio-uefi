@@ -8,12 +8,14 @@ pub type NodeAddr = u16;
 pub type CodecAddr = u8;
 
 pub type WidgetAddr = (CodecAddr, NodeAddr);
+
 /*
 impl fmt::Display for WidgetAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:01X}:{:02X}\n", self.0, self.1)
     }
-}*/
+}
+*/
 
 #[derive(Debug, PartialEq)]
 #[repr(u8)]
