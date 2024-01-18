@@ -97,8 +97,11 @@ fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
 }
 
 fn main() {
+  println!("Attempt to create PCI channels: ");
   let (mut pci_from_write, pci_from_read) = bounded(1024);
+  println!("OK");
   let (pci_to_write, mut pci_to_read) = bounded(1024);
+  println!("OK2");
   let drivers = pci_main(&mut pci_from_write, &mut pci_to_read);
   hda_main(pci_to_write, pci_from_read, pci_from_write, pci_to_read, drivers);
 }

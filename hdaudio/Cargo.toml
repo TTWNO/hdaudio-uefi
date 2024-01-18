@@ -29,7 +29,3 @@ thiserror = "1"
 toml = "0.5"
 
 lazy_static = "1.4.0"
-
-[profile.dev]
-codegen-backend = "rustc"
-

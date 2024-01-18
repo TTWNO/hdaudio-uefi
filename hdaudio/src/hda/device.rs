@@ -472,6 +472,9 @@ impl IntelHDA {
 		println!("Best pin: {:01X}:{:02X}", outpin.0, outpin.1);
 
 		let path = self.find_path_to_dac(outpin).unwrap();
+		println!("Attempt to drop otupin");
+		drop(outpin);
+		println!("Dropping outpin is not a problem");
 
 		let dac = *path.last().unwrap();
 		let pin = *path.first().unwrap();
@@ -505,7 +508,6 @@ impl IntelHDA {
 		output.set_stream_number(1);
 		output.set_last_valid_index((NUM_SUB_BUFFS - 1) as u16);
 		output.set_interrupt_on_completion(true);
-
 		// Set DAC converter format
 		self.set_converter_format(dac, &super::SR_44_1, BitsPerSample::Bits16, 2);
 
@@ -552,12 +554,17 @@ impl IntelHDA {
 		//TODO: implement hda-verb?
 
 		output.run();
+
 		println!("Waiting for output 0 to start running...");
 		while output.control() & (1 << 1) == 0 {
 			//TODO: relax
 		}
 
 		println!("Output 0 CONTROL {:#X} STATUS {:#X} POS {:#X}", output.control(), output.status(), output.link_position());
+
+		println!("Attempt to drop output");
+		drop(output);
+		println!("Dropping output is not a problem");
 	}
 	/*
 
