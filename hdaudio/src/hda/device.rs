@@ -479,27 +479,33 @@ impl IntelHDA {
 		let dac = *path.last().unwrap();
 		let pin = *path.first().unwrap();
 
-		println!("Path to DAC: {:X?}", path);
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 
 		// Set power state 0 (on) for all widgets in path
 		for &addr in &path {
 			self.set_power_state(addr, 0);
 		}
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 
 		// Pin enable (0x80 = headphone amp enable, 0x40 = output enable)
 		self.cmd.cmd12(pin, 0x707, 0xC0);
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 
 		// EAPD enable
 		self.cmd.cmd12(pin, 0x70C, 2);
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 
 		// Set DAC stream and channel
 		self.set_stream_channel(dac, 1, 0);
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 
 		self.update_sound_buffers();
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 
 		println!("Supported Formats: {:08X}", self.get_supported_formats((0,0x1)));
 		println!("Capabilities: {:08X}", self.get_capabilities(path[0]));
 
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 		// Create output stream
 		let output = self.get_output_stream_descriptor(0).unwrap();
 		output.set_address(self.buff_desc_phys);
@@ -515,6 +521,7 @@ impl IntelHDA {
 		//TODO: should validate?
 		self.cmd.cmd12(dac, 0xA00, 0);
 
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 		// Unmute and set gain to 0db for input and output amplifiers on all widgets in path
 		for &addr in &path {
 			// Read widget capabilities
@@ -550,8 +557,10 @@ impl IntelHDA {
 				println!("Set {:X?} output gain to 0x{:X}", addr, out_gain);
 			}
 		}
-		println!("{:?}", path);
+		println!("Path to DAC ({}): {:X?}", line!(), path);
+		println!("{:?}", path.as_ptr());
 		println!("Try to drop path");
+		// TODO: this line causes an instant crash
 		drop(path);
 		println!("Dropping path did nothing");
 
@@ -912,12 +921,14 @@ impl IntelHDA {
 }
 
 
+/*
 impl Drop for IntelHDA {
 	fn drop(&mut self) {
 		log::info!("IHDA: Deallocating IHDA driver.");
 
 	}
 }
+*/
 
 //impl SchemeBlockMut for IntelHDA {
 impl IntelHDA {
