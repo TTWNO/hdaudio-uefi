@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::cmp;
+use std::cmp::min;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str;
@@ -443,15 +444,15 @@ impl IntelHDA {
 	  Fixed?
 	*/
 
+	// TODO: this function causes the `path` variable to show [(0.0). (0.0)].
 	pub fn update_sound_buffers(&mut self) {
-		/*
 		for i in 0..self.buffs.len(){
 			for j in 0.. min(self.buffs[i].len(), 128/16 ) {
-				self.buff_desc[i * 128/16 + j].set_address(self.buffs[i][j].phys());
+				self.buff_desc[i * 128/16 + j].set_address(self.buffs[i][j].phys().try_into().unwrap());
 				self.buff_desc[i * 128/16 + j].set_length(self.buffs[i][j].length() as u32);
 				self.buff_desc[i * 128/16 + j].set_interrupt_on_complete(true);
 			}
-		}*/
+		}
 
 		let r = self.get_output_stream_descriptor(0).unwrap();
 
