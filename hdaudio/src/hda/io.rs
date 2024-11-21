@@ -38,18 +38,17 @@ impl<T> Io for Mmio<T> where T: Copy + PartialEq + BitAnd<Output = T> + BitOr<Ou
 
     fn read(&self) -> T {
         unsafe { 
-          self.value.assume_init()
+					self.value.assume_init()
           //let ptr = self.value;
-          //read_unaligned(ptr.as_ptr())
+         //read_unaligned(ptr.as_ptr())
         }
     }
 
     fn write(&mut self, value: T) {
-        unsafe { 
-          *self = Mmio::from(value);
-          //let mut v  = self.value;
-          //write_unaligned(ptr.as_mut_ptr(), value)
-        }
+				*self = Mmio::from(value);
+        //unsafe { 
+				//	write_unaligned(*mut self.value, value)
+        //}
     }
 }
 
