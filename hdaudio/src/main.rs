@@ -1,5 +1,8 @@
+#![allow(dead_code)]
+
 mod hda;
 mod pcid;
+
 
 use pcid::*;
 use crate::state::*;
@@ -19,8 +22,9 @@ use pcid::SubdriverArguments;
 
 
 use pcid::PcidServerHandle;
+use crate::irq_helpers::{read_bsp_apic_id, allocate_single_interrupt_vector};
 
-#[cfg(not(target_arch = "x85_64"))]
+#[cfg(not(target_arch = "x86_64"))]
 fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
     let pci_config = pcid_handle.fetch_config().expect("ihdad: failed to fetch config");
     let irq = pci_config.func.legacy_interrupt_line;
@@ -34,7 +38,7 @@ fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
     }
 }
 
-#[cfg(target_arch = "x85_64")]
+#[cfg(target_arch = "x86_64")]
 fn get_int_method(pcid_handle: &mut PcidServerHandle) -> Option<File> {
     let pci_config = pcid_handle.fetch_config().expect("ihdad: failed to fetch config");
 
