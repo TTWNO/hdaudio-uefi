@@ -14,6 +14,9 @@ use std::alloc::alloc_zeroed;
 
 //use syscall::error::{Error, ErrorKind::PermissionsDenied, "No access", ErrorKind::Other, "Bad F", ErrorKind::InvalidInput, "input failed to process"};
 //use syscall::flag::{SEEK_SET, SEEK_CUR, SEEK_END};
+const SEEK_SET: usize = 0;
+const SEEK_CUR: usize = 1;
+const SEEK_END: usize = 2;
 //use syscall::io::{Mmio, Io};
 //use syscall::scheme::SchemeBlockMut;
 
