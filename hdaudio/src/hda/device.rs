@@ -369,6 +369,7 @@ impl IntelHDA {
                     continue;
                 }
 				let mut widget = self.read_node((codec, afg_start + j));
+				println!("WT: {:?}", widget.widget_type());
 				println!("{}", widget);
 				widget.is_widget = true;
 				match widget.widget_type() {
@@ -376,26 +377,36 @@ impl IntelHDA {
 					HDAWidgetType::AudioInput  => {self.inputs.push(widget.addr)},
 					HDAWidgetType::BeepGenerator => {self.beep_addr = widget.addr },
 					HDAWidgetType::PinComplex => {
+						print!("PC...");
 						let config = widget.configuration_default();
+						print!("check_output...");
 						if config.is_output() {
+							print!("true...");
 							self.output_pins.push(widget.addr);
 						} else if config.is_input() {
+							print!("false...");
 							self.input_pins.push(widget.addr);
 						}
+						println!("ok...");
 					},
 					_ => {},
 				}
 
+				println!("Add to map: {:?},{:?}", widget.addr(), widget);
 				self.widget_map.insert(widget.addr(), widget);
 			}
 		}
+		println!("Done enumeration!");
 	}
 
 	pub fn find_best_output_pin(&mut self) -> Option<WidgetAddr>{
+		print!("FBOP...");
 		let outs = &self.output_pins;
 		if outs.len() == 0 {
+			println!("None!");
 			None
 		} else if outs.len() == 1 {
+			println!("One({:?})", outs[0]);
 			Some(outs[0])
 		} else {
 			//TODO: change output based on "unsolicited response" interrupts
@@ -403,26 +414,39 @@ impl IntelHDA {
 			for supported_device in &[
 				DefaultDevice::HPOut,
 				DefaultDevice::Speaker,
+				DefaultDevice::LineOut,
+				DefaultDevice::AUX,
+				DefaultDevice::DigitalOtherOut,
 			] {
 				for &out in outs {
+					print!("look at...{out:?}...");
 					let widget = self.widget_map.get(&out).unwrap();
 					let cd = widget.configuration_default();
+					print!("Try read!");
+					print!("seq={},default={:?},supported={:?}", cd.sequence(), cd.default_device(), supported_device);
 					if cd.sequence() == 0 && &cd.default_device() == supported_device {
+						print!("...seq=0,default=supported");
 						// Check for jack detect bit
 						let pin_caps = self.cmd.cmd12(widget.addr, 0xF00, 0x0C);
+						print!("...PC={pin_caps:x}");
 						if pin_caps & (1 << 2) != 0 {
 							// Check for presence
 							let pin_sense = self.cmd.cmd12(widget.addr, 0xF09, 0);
+						print!("...PS={pin_sense:x}");
+							// Ignore "not plugged in"; send it?
+							// No! This causes instant-crash on FW13-AMD... but unsure why...
 							if pin_sense & (1 << 31) == 0 {
 								// Skip if nothing is plugged in
 								continue;
 							}
 						}
+						println!("Found: {out:?}");
 						return Some(out);
 					}
 				}
 			}
 
+			println!("None!");
 			None
 		}
 	}

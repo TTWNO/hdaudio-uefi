@@ -1,0 +1,1 @@
+qemu-system-x86_64: -drive format=raw,file=fat:rw:./hdaudio/target/x86_64-unknown-uefi/debug/: Could not read directory ./hdaudio/target/x86_64-unknown-uefi/debug

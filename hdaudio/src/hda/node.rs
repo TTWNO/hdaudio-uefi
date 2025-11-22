@@ -1,7 +1,7 @@
 use std::{mem, fmt};
 use super::common::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct HDANode {
 	pub addr: WidgetAddr,
 

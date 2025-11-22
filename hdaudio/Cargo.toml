@@ -1,4 +1,3 @@
-cargo-features = ["codegen-backend"]
 [package]
 name = "ihdad"
 version = "0.1.0"
