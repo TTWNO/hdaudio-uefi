@@ -359,7 +359,13 @@ impl IntelHDA {
 			let afg_start = afg.subnode_start;
 
 			for j in 0..afg_count {
+                print!("TRY WIDGET...");
+                if afg_start + j == 0x22 {
+                    println!("SKIP!");
+                    continue;
+                }
 				let mut widget = self.read_node((codec, afg_start + j));
+				println!("{}", widget);
 				widget.is_widget = true;
 				match widget.widget_type() {
 					HDAWidgetType::AudioOutput => {self.outputs.push(widget.addr)},
@@ -376,7 +382,6 @@ impl IntelHDA {
 					_ => {},
 				}
 
-				println!("{}", widget);
 				self.widget_map.insert(widget.addr(), widget);
 			}
 		}
@@ -419,6 +424,7 @@ impl IntelHDA {
 	}
 
 	pub fn find_path_to_dac(&self, addr: WidgetAddr) -> Option<Vec<WidgetAddr>>{
+        println!("[find_path_to_dac]: {addr:?}");
 		let widget = self.widget_map.get(&addr).unwrap();
 		if widget.widget_type() == HDAWidgetType::AudioOutput {
 			Some(vec![addr])
@@ -426,6 +432,7 @@ impl IntelHDA {
 			let connection = widget.connections.get(widget.connection_default as usize)?;
 			let mut path = self.find_path_to_dac(*connection)?;
 			path.insert(0, addr);
+            println!("PATH: {path:?}");
 			Some(path)
 		}
 	}

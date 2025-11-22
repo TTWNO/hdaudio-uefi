@@ -104,6 +104,7 @@ fn main() {
   println!("OK2");
   let drivers = pci_main(&mut pci_from_write, &mut pci_to_read);
   hda_main(pci_to_write, pci_from_read, pci_from_write, pci_to_read, drivers);
+  println!("Sucessfully initialized Intel HD Audio buffers. TBC!");
 }
 
 fn hda_main(pci_to_write: Sender<Vec<u8>>, pci_from_read: Receiver<Vec<u8>>, pci_from_write: Sender<Vec<u8>>, pci_to_read: Receiver<Vec<u8>>, drivers: Vec<(DriverHandler, SubdriverArguments)>) {
@@ -158,7 +159,7 @@ let address = unsafe {
   println!("Makde vendor prod");
 
 	let mut device = unsafe { hda::IntelHDA::new(address, vend_prod).expect("ihdad: failed to allocate device") };
-  println!("Created intel hDA device");
+  println!("Created intel hDA device; now what?");
   // TODO: Now what?
 }
 
