@@ -1,0 +1,1 @@
+qemu-system-x86_64 -bios /usr/share/ovmf/x64/OVMF.4m.fd -enable-kvm -machine q35 -cpu host -device vfio-pci,host=0f:00.4 -drive format=raw,file=fat:rw:./hdaudio/target/x86_64-unknown-uefi/debug/ -display sdl -vga none -device virtio-vga,xres=800,yres=600 

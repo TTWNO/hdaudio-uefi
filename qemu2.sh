@@ -1,0 +1,1 @@
+qemu-system-x86_64 -bios /usr/share/ovmf/x64/OVMF.4m.fd -nodefaults -display gtk -vga std -audiodev pipewire,id=Sound -device ich9-intel-hda,debug=6 -device hda-duplex,audiodev=Sound -drive format=raw,file=fat:rw:./hdaudio/target/x86_64-unknown-uefi/debug/ -display sdl -vga none -device virtio-vga,xres=800,yres=600 
