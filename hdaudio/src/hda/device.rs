@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::cmp;
+use std::cmp::min;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str;
@@ -13,6 +14,9 @@ use std::alloc::alloc_zeroed;
 
 //use syscall::error::{Error, ErrorKind::PermissionsDenied, "No access", ErrorKind::Other, "Bad F", ErrorKind::InvalidInput, "input failed to process"};
 //use syscall::flag::{SEEK_SET, SEEK_CUR, SEEK_END};
+const SEEK_SET: usize = 0;
+const SEEK_CUR: usize = 1;
+const SEEK_END: usize = 2;
 //use syscall::io::{Mmio, Io};
 //use syscall::scheme::SchemeBlockMut;
 
@@ -450,15 +454,15 @@ impl IntelHDA {
 	  Fixed?
 	*/
 
+	// TODO: this function causes the `path` variable to show [(0.0). (0.0)].
 	pub fn update_sound_buffers(&mut self) {
-		/*
 		for i in 0..self.buffs.len(){
 			for j in 0.. min(self.buffs[i].len(), 128/16 ) {
-				self.buff_desc[i * 128/16 + j].set_address(self.buffs[i][j].phys());
+				self.buff_desc[i * 128/16 + j].set_address(self.buffs[i][j].phys().try_into().unwrap());
 				self.buff_desc[i * 128/16 + j].set_length(self.buffs[i][j].length() as u32);
 				self.buff_desc[i * 128/16 + j].set_interrupt_on_complete(true);
 			}
-		}*/
+		}
 
 		let r = self.get_output_stream_descriptor(0).unwrap();
 
@@ -486,27 +490,33 @@ impl IntelHDA {
 		let dac = *path.last().unwrap();
 		let pin = *path.first().unwrap();
 
-		println!("Path to DAC: {:X?}", path);
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 
 		// Set power state 0 (on) for all widgets in path
 		for &addr in &path {
 			self.set_power_state(addr, 0);
 		}
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 
 		// Pin enable (0x80 = headphone amp enable, 0x40 = output enable)
 		self.cmd.cmd12(pin, 0x707, 0xC0);
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 
 		// EAPD enable
 		self.cmd.cmd12(pin, 0x70C, 2);
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 
 		// Set DAC stream and channel
 		self.set_stream_channel(dac, 1, 0);
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 
 		self.update_sound_buffers();
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 
 		println!("Supported Formats: {:08X}", self.get_supported_formats((0,0x1)));
 		println!("Capabilities: {:08X}", self.get_capabilities(path[0]));
 
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 		// Create output stream
 		let output = self.get_output_stream_descriptor(0).unwrap();
 		output.set_address(self.buff_desc_phys);
@@ -522,6 +532,7 @@ impl IntelHDA {
 		//TODO: should validate?
 		self.cmd.cmd12(dac, 0xA00, 0);
 
+		println!("Path to DAC ({}): {:X?}", line!(), path);
 		// Unmute and set gain to 0db for input and output amplifiers on all widgets in path
 		for &addr in &path {
 			// Read widget capabilities
@@ -557,8 +568,10 @@ impl IntelHDA {
 				println!("Set {:X?} output gain to 0x{:X}", addr, out_gain);
 			}
 		}
-		println!("{:?}", path);
+		println!("Path to DAC ({}): {:X?}", line!(), path);
+		println!("{:?}", path.as_ptr());
 		println!("Try to drop path");
+		// TODO: this line causes an instant crash
 		drop(path);
 		println!("Dropping path did nothing");
 
@@ -919,12 +932,14 @@ impl IntelHDA {
 }
 
 
+/*
 impl Drop for IntelHDA {
 	fn drop(&mut self) {
 		log::info!("IHDA: Deallocating IHDA driver.");
 
 	}
 }
+*/
 
 //impl SchemeBlockMut for IntelHDA {
 impl IntelHDA {
