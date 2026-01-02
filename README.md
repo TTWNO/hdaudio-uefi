@@ -5,7 +5,7 @@ Currently in progress towards basic first goal of nightly Rust for x86_64 UEFI, 
 
 * [ ] `x86_64-unknown-uefi` (nightly, with std)
 * [ ] `x86_64-unknown-uefi` (stable, `no_std`)
-* [ ] `x86_64-unknwon-unknown` (`no_std`, stable, possibly `no_alloc`?)
+* [ ] `x86_64-unknown-unknown` (`no_std`, stable, possibly `no_alloc`?)
 
 ## TODO
 
