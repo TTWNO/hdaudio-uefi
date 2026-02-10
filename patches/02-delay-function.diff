@@ -1,0 +1,28 @@
+--- a/hdaudio/src/hda/mod.rs
++++ b/hdaudio/src/hda/mod.rs
+@@ -7,6 +7,25 @@ pub mod io;
+ pub use self::stream::*;
+ pub use self::node::*;
+
++/// Busy-wait delay using TSC (Time Stamp Counter).
++///
++/// Assumes a minimum TSC frequency of 1 GHz (1000 cycles/us), which is
++/// conservative for any modern x86_64 CPU. The actual delay will be at
++/// least `us` microseconds.
++#[inline(never)]
++pub fn delay_us(us: u64) {
++    unsafe {
++        let start = core::arch::x86_64::_rdtsc();
++        // Conservative: assume at least 1 GHz TSC = 1000 cycles per us.
++        // Real hardware is typically 2-4 GHz, so delays will be at least
++        // as long as requested.
++        let target_cycles = us.saturating_mul(1000);
++        while core::arch::x86_64::_rdtsc().wrapping_sub(start) < target_cycles {
++            core::hint::spin_loop();
++        }
++    }
++}
++
+
+ pub use self::cmdbuff::*;
+ pub use self::stream::StreamDescriptorRegs;

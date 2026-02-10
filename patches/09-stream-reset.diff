@@ -1,0 +1,51 @@
+--- a/hdaudio/src/hda/stream.rs
++++ b/hdaudio/src/hda/stream.rs
+@@ -143,6 +143,38 @@ impl StreamDescriptorRegs {
+ 		self.buff_length.read()
+ 	}
+
++	/// Reset stream descriptor per HDA spec section 3.3.35.
++	/// Must be called before configuring a stream to ensure it's in a
++	/// known state. Firmware may have left streams partially configured.
++	pub fn reset(&mut self) {
++		// 1. Set SRST bit (bit 0 of control register)
++		let ctrl = self.control();
++		self.set_control((ctrl & !0x2) | 0x1); // Set SRST, clear RUN
++
++		// 2. Poll until SRST reads back as 1 (acknowledged)
++		// Timeout after 10ms (1000 iterations * 10us)
++		for _ in 0..1000 {
++			if self.control() & 0x1 != 0 {
++				break;
++			}
++			super::delay_us(10);
++		}
++
++		// 3. Clear SRST bit
++		let ctrl = self.control();
++		self.set_control(ctrl & !0x1);
++
++		// 4. Poll until SRST reads back as 0 (reset complete)
++		// Timeout after 10ms (1000 iterations * 10us)
++		for _ in 0..1000 {
++			if self.control() & 0x1 == 0 {
++				break;
++			}
++			super::delay_us(10);
++		}
++	}
++
+ 	pub fn run(&mut self) {
+ 		let val = self.control() | (1 << 1);
+ 		self.set_control(val);
+--- a/hdaudio/src/hda/device.rs
++++ b/hdaudio/src/hda/device.rs
+@@ -509,6 +509,9 @@ impl IntelHDA {
+ 		// Create output stream
+ 		let output = self.get_output_stream_descriptor(0).unwrap();
++
++		// Reset stream before configuration (required for real hardware)
++		output.reset();
++
+ 		output.set_address(self.buff_desc_phys);
+ 		output.set_pcm_format(&super::SR_44_1, BitsPerSample::Bits16, 2);

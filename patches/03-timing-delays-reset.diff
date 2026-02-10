@@ -1,0 +1,55 @@
+--- a/hdaudio/src/hda/device.rs
++++ b/hdaudio/src/hda/device.rs
+@@ -662,26 +662,44 @@ impl IntelHDA {
+ 	pub fn reset_controller(&mut self) -> bool {
+ 		self.regs.statests.write(0xFFFF);
+
+-		// 3.3.7
++		// 3.3.7 - Controller Reset
++		// Clear CRST bit to enter reset
+ 		self.regs.gctl.writef(CRST, false);
+-		loop {
++
++		// Poll until CRST reads 0 (reset entered), with 10us delays
++		// Timeout after 10000 iterations (~100ms)
++		for _ in 0..10000 {
+ 			if ! self.regs.gctl.readf(CRST) {
+ 				break;
+ 			}
++			super::delay_us(10);
+ 		}
++
++		// Mandatory 100us delay after entering reset (HDA spec 4.2.2)
++		super::delay_us(100);
++
++		// Set CRST bit to exit reset
+ 		self.regs.gctl.writef(CRST, true);
+-		loop {
++
++		// Poll until CRST reads 1 (reset complete), with 10us delays
++		// Timeout after 10000 iterations (~100ms)
++		for _ in 0..10000 {
+ 			if self.regs.gctl.readf(CRST) {
+ 				break;
+ 			}
++			super::delay_us(10);
+ 		}
+
+-		let mut ticks:u32 = 0;
+-		while self.regs.statests.read() == 0 {
+-			ticks += 1;
+-			if ticks > 10000 { break;}
+-
++		// Wait for codec discovery - spec requires minimum 521us,
++		// but real hardware (especially AMD) may need up to 2ms
++		super::delay_us(2000);
++
++		// Poll STATESTS for codec presence, with delays
++		for _ in 0..1000 {
++			if self.regs.statests.read() != 0 {
++				break;
++			}
++			super::delay_us(10);
+ 		}
+
+ 		let statests = self.regs.statests.read();

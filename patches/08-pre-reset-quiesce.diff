@@ -1,0 +1,41 @@
+--- a/hdaudio/src/hda/device.rs
++++ b/hdaudio/src/hda/device.rs
+@@ -660,6 +660,36 @@ impl IntelHDA {
+ 	}
+
+ 	pub fn reset_controller(&mut self) -> bool {
++		// Pre-reset quiesce: stop all DMA engines before resetting
++		// the controller. If firmware left streams running, resetting
++		// while DMA is active can cause the controller to DMA into
++		// random/stale addresses, causing hard resets.
++
++		// Stop all input stream DMA engines
++		let iss = ((self.regs.gcap.read() >> 8) & 0xF) as usize;
++		for i in 0..iss {
++			unsafe {
++				let sd = &mut *((self.base + 0x80 + i * 0x20) as *mut StreamDescriptorRegs);
++				sd.set_control(0);
++			}
++		}
++		// Stop all output stream DMA engines
++		let oss = ((self.regs.gcap.read() >> 12) & 0xF) as usize;
++		for i in 0..oss {
++			unsafe {
++				let sd = &mut *((self.base + 0x80 + iss * 0x20 + i * 0x20) as *mut StreamDescriptorRegs);
++				sd.set_control(0);
++			}
++		}
++
++		// Stop CORB and RIRB DMA engines
++		self.regs.corbctl.write(0);
++		self.regs.rirbctl.write(0);
++
++		// Reset DMA position buffer
++		self.regs.dplbase.write(0);
++		self.regs.dpubase.write(0);
++
++		super::delay_us(100);
++
+ 		self.regs.statests.write(0xFFFF);
+
+ 		// 3.3.7

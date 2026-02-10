@@ -1,0 +1,13 @@
+--- a/hdaudio/src/hda/device.rs
++++ b/hdaudio/src/hda/device.rs
+@@ -359,10 +359,6 @@ impl IntelHDA {
+
+ 		for j in 0..afg_count {
+                 print!("TRY WIDGET...");
+-                if afg_start + j == 0x22 {
+-                    println!("SKIP!");
+-                    continue;
+-                }
+ 			let mut widget = self.read_node((codec, afg_start + j));
+ 			println!("{}", widget);
+ 			widget.is_widget = true;

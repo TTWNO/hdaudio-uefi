@@ -1,0 +1,50 @@
+--- a/hdaudio/src/main.rs
++++ b/hdaudio/src/main.rs
+@@ -482,10 +482,38 @@ fn handle_parsed_header(
+         if let Some(ref args) = driver.command {
+             // Enable bus mastering, memory space, and I/O space
+             unsafe {
+                 let mut data = pci.read(bus_num, dev_num, func_num, 0x04);
+                 data |= 7;
+                 pci.write(bus_num, dev_num, func_num, 0x04, data);
+             }
+
++            // Vendor-specific PCIe snoop / traffic class configuration.
++            // Without this, DMA is not cache-coherent on some controllers.
++            let vendor_id = header.vendor_id();
++            unsafe {
++                match vendor_id {
++                    // Intel: Set Traffic Class Select (TCSEL) register
++                    // PCI config offset 0x44, clear bits [2:0] to select TC0
++                    0x8086 => {
++                        let tcsel = pci.read(bus_num, dev_num, func_num, 0x44);
++                        pci.write(bus_num, dev_num, func_num, 0x44, tcsel & 0xFFFF_FFF8);
++                        println!("HDA: Intel TCSEL configured (was {:#X})", tcsel & 0x7);
++                    }
++                    // AMD: Enable PCIe snoop at PCI config register 0x42
++                    // Read byte at 0x42, mask with 0xF8, OR with 0x02 to enable snoop
++                    0x1022 => {
++                        let reg40 = pci.read(bus_num, dev_num, func_num, 0x40);
++                        let byte42 = ((reg40 >> 16) & 0xFF) as u32;
++                        let new_byte42 = (byte42 & 0xF8) | 0x02;
++                        let new_reg40 = (reg40 & 0xFF00FFFF) | (new_byte42 << 16);
++                        pci.write(bus_num, dev_num, func_num, 0x40, new_reg40);
++                        println!("HDA: AMD PCIe snoop enabled (reg42: {:#X} -> {:#X})", byte42, new_byte42);
++                    }
++                    // Nvidia: reg 0x4E, mask 0xF0, enable 0x0F
++                    0x10DE => {
++                        let reg4c = pci.read(bus_num, dev_num, func_num, 0x4C);
++                        let byte4e = ((reg4c >> 16) & 0xFF) as u32;
++                        let new_byte4e = (byte4e & 0xF0) | 0x0F;
++                        let new_reg4c = (reg4c & 0xFF00FFFF) | (new_byte4e << 16);
++                        pci.write(bus_num, dev_num, func_num, 0x4C, new_reg4c);
++                        println!("HDA: Nvidia snoop enabled (reg4E: {:#X} -> {:#X})", byte4e, new_byte4e);
++                    }
++                    _ => {
++                        println!("HDA: Unknown vendor {:#06X}, no snoop config applied", vendor_id);
++                    }
++                }
++            }
++
+             // Set IRQ line to 9 if not set
+             let mut irq;

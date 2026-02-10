@@ -1,0 +1,47 @@
+--- a/hdaudio/src/hda/cmdbuff.rs
++++ b/hdaudio/src/hda/cmdbuff.rs
+@@ -139,33 +139,15 @@ impl Corb {
+     }
+
+     pub fn reset_read_pointer(&mut self) {
+-        /*
+-         * FIRST ISSUE/PATCH
+-         * This will loop forever in virtualbox
+-         * So maybe just resetting the read pointer
+-         * and leaving for the specific model?
+-         */
+-        if true {
+-            self.regs.corbrp.writef(CORBRPRST, true);
+-        } else {
+-            // 3.3.21
+-
+-            self.stop();
+-            // Set CORBRPRST to 1
+-            println!("CORBRP {:X}", self.regs.corbrp.read());
+-            self.regs.corbrp.writef(CORBRPRST, true);
+-            println!("CORBRP {:X}", self.regs.corbrp.read());
+-
+-            // Wait for it to become 1
+-            while !self.regs.corbrp.readf(CORBRPRST) {
+-                self.regs.corbrp.writef(CORBRPRST, true);
+-            }
+-            // Clear the bit again
+-            self.regs.corbrp.write(0);
+-
+-            // Read back the bit until zero to verify that it is cleared.
+-
+-            loop {
+-                if !self.regs.corbrp.readf(CORBRPRST) {
+-                    break;
+-                }
+-                self.regs.corbrp.write(0);
+-            }
+-        }
++        // FreeBSD approach: write the reset bit, then immediately write 0
++        // to clear it. The HDA spec says CORBRPRST always reads as 0, but
++        // some hardware (e.g., 82801G) is buggy and doesn't clear the bit,
++        // which stalls the CORB engine. Don't bother polling.
++        self.regs.corbrp.write(CORBRPRST);
++        super::delay_us(100);
++        self.regs.corbrp.write(0);
+     }

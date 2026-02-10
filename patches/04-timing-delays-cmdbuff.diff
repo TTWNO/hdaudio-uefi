@@ -1,0 +1,87 @@
+--- a/hdaudio/src/hda/cmdbuff.rs
++++ b/hdaudio/src/hda/cmdbuff.rs
+@@ -128,8 +128,13 @@ impl Corb {
+
+     #[inline(never)]
+     pub fn stop(&mut self) {
+-        while self.regs.corbctl.readf(CORBRUN) {
++        // Stop CORB DMA with timeout
++        for _ in 0..10000 {
++            if !self.regs.corbctl.readf(CORBRUN) {
++                break;
++            }
+             self.regs.corbctl.write(0);
++            super::delay_us(10);
+         }
+     }
+
+@@ -175,7 +180,16 @@ impl Corb {
+
+     fn send_command(&mut self, cmd: u32) {
+         // wait for the commands to finish
+-        while (self.regs.corbwp.read() & 0xff) != (self.regs.corbrp.read() & 0xff) {}
++        // Timeout after 10000 iterations (~100ms) to prevent infinite hang
++        for i in 0..10000u32 {
++            if (self.regs.corbwp.read() & 0xff) == (self.regs.corbrp.read() & 0xff) {
++                break;
++            }
++            super::delay_us(10);
++            if i == 9999 {
++                println!("CORB: timeout waiting for commands to finish");
++            }
++        }
+         let write_pos: usize =
+             ((self.regs.corbwp.read() as usize & 0xFF) + 1) % self.corb_count;
+         unsafe {
+@@ -278,7 +292,16 @@ impl Rirb {
+
+     fn read_response(&mut self) -> u64 {
+         // wait for response
+-        while (self.regs.rirbwp.read() & 0xff) == (self.rirb_rp & 0xff) {}
++        // Timeout after 10000 iterations (~100ms) to prevent infinite hang
++        for i in 0..10000u32 {
++            if (self.regs.rirbwp.read() & 0xff) != (self.rirb_rp & 0xff) {
++                break;
++            }
++            super::delay_us(10);
++            if i == 9999 {
++                println!("RIRB: timeout waiting for response");
++            }
++        }
+         let read_pos: u16 = (self.rirb_rp + 1) % self.rirb_count as u16;
+
+         let res: u64;
+@@ -314,10 +337,22 @@ impl ImmediateCommand {
+
+     pub fn cmd(&mut self, cmd: u32) -> u64 {
+         // wait for ready
+-        while self.regs.ics.readf(ICB) {}
++        for i in 0..10000u32 {
++            if !self.regs.ics.readf(ICB) {
++                break;
++            }
++            super::delay_us(10);
++            if i == 9999 {
++                println!("ICS: timeout waiting for ready");
++            }
++        }
+
+         // write command
+         self.regs.icoi.write(cmd);
+@@ -326,7 +361,16 @@ impl ImmediateCommand {
+         self.regs.ics.writef(ICB, true);
+
+         // wait for IRV bit to be set to indicate a response is latched
+-        while !self.regs.ics.readf(IRV) {}
++        for i in 0..10000u32 {
++            if self.regs.ics.readf(IRV) {
++                break;
++            }
++            super::delay_us(10);
++            if i == 9999 {
++                println!("ICS: timeout waiting for IRV");
++            }
++        }
+
+         // read the result register twice, total of 8 bytes
+         // highest 4 will most likely be zeros (so I've heard)

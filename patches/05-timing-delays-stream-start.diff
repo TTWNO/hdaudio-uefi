@@ -1,0 +1,20 @@
+--- a/hdaudio/src/hda/device.rs
++++ b/hdaudio/src/hda/device.rs
+@@ -567,9 +567,16 @@ impl IntelHDA {
+ 		output.run();
+
+ 		println!("Waiting for output 0 to start running...");
+-		while output.control() & (1 << 1) == 0 {
+-			//TODO: relax
++		// Poll with timeout and delay to prevent infinite hang
++		for i in 0..10000u32 {
++			if output.control() & (1 << 1) != 0 {
++				break;
++			}
++			super::delay_us(10);
++			if i == 9999 {
++				println!("WARNING: timeout waiting for output stream to start running");
++			}
+ 		}
+
+ 		println!("Output 0 CONTROL {:#X} STATUS {:#X} POS {:#X}", output.control(), output.status(), output.link_position());

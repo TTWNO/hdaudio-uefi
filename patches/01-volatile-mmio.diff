@@ -1,0 +1,34 @@
+--- a/hdaudio/src/hda/io.rs
++++ b/hdaudio/src/hda/io.rs
+@@ -1,8 +1,6 @@
+ use core::cmp::PartialEq;
+ use core::ops::{BitAnd, BitOr, Not};
+
+-
+-use core::ptr::{read_unaligned, write_unaligned};
+ use core::mem::MaybeUninit;
+
+ #[repr(packed)]
+@@ -36,17 +34,13 @@ impl<T> Io for Mmio<T> where T: Copy + PartialEq + BitAnd<Output = T> + BitOr<O
+     type Value = T;
+
+     fn read(&self) -> T {
+-        unsafe {
+-          self.value.assume_init()
+-          //let ptr = self.value;
+-          //read_unaligned(ptr.as_ptr())
++        unsafe {
++            core::ptr::read_volatile(self.value.as_ptr())
+         }
+     }
+
+     fn write(&mut self, value: T) {
+-        unsafe {
+-          *self = Mmio::from(value);
+-          //let mut v  = self.value;
+-          //write_unaligned(ptr.as_mut_ptr(), value)
++        unsafe {
++            core::ptr::write_volatile(self.value.as_mut_ptr(), value)
+         }
+     }
+ }

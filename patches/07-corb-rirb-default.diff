@@ -1,0 +1,19 @@
+--- a/hdaudio/src/hda/device.rs
++++ b/hdaudio/src/hda/device.rs
+@@ -218,11 +218,12 @@ impl IntelHDA {
+ 	pub fn init(&mut self) -> bool {
+ 		self.reset_controller();
+
+-		let use_immediate_command_interface = match self.vend_prod {
+-
+-			0x8086_2668 => false,
+-			_ => true,
++		// Use CORB/RIRB for all hardware by default.
++		// Immediate Command Interface is intended for BIOS/firmware,
++		// not OS drivers, and is not supported by all controllers
++		// (especially AMD). Only fall back to immediate for known-broken CORB/RIRB.
++		let use_immediate_command_interface = match self.vend_prod {
++			_ => false,
+ 		};
+
+ 		self.cmd.init(use_immediate_command_interface);
