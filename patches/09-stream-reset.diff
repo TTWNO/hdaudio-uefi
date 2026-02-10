@@ -1,6 +1,6 @@
 --- a/hdaudio/src/hda/stream.rs
 +++ b/hdaudio/src/hda/stream.rs
-@@ -143,6 +143,38 @@ impl StreamDescriptorRegs {
+@@ -143,6 +143,37 @@ impl StreamDescriptorRegs {
  		self.buff_length.read()
  	}
 
@@ -40,7 +40,7 @@
  		self.set_control(val);
 --- a/hdaudio/src/hda/device.rs
 +++ b/hdaudio/src/hda/device.rs
-@@ -509,6 +509,9 @@ impl IntelHDA {
+@@ -509,4 +509,8 @@ impl IntelHDA {
  		// Create output stream
  		let output = self.get_output_stream_descriptor(0).unwrap();
 +

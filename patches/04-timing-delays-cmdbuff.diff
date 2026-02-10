@@ -51,7 +51,7 @@
          let read_pos: u16 = (self.rirb_rp + 1) % self.rirb_count as u16;
 
          let res: u64;
-@@ -314,10 +337,22 @@ impl ImmediateCommand {
+@@ -314,7 +337,15 @@ impl ImmediateCommand {
 
      pub fn cmd(&mut self, cmd: u32) -> u64 {
          // wait for ready
@@ -68,7 +68,7 @@
 
          // write command
          self.regs.icoi.write(cmd);
-@@ -326,7 +361,16 @@ impl ImmediateCommand {
+@@ -326,7 +361,15 @@ impl ImmediateCommand {
          self.regs.ics.writef(ICB, true);
 
          // wait for IRV bit to be set to indicate a response is latched

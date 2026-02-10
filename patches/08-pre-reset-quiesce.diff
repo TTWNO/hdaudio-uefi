@@ -1,6 +1,6 @@
 --- a/hdaudio/src/hda/device.rs
 +++ b/hdaudio/src/hda/device.rs
-@@ -660,6 +660,36 @@ impl IntelHDA {
+@@ -660,6 +660,38 @@ impl IntelHDA {
  	}
 
  	pub fn reset_controller(&mut self) -> bool {
@@ -38,4 +38,4 @@
 +
  		self.regs.statests.write(0xFFFF);
 
- 		// 3.3.7
+ 		// 3.3.7 - Controller Reset

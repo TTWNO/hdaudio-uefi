@@ -1,10 +1,10 @@
 --- a/hdaudio/src/hda/stream.rs
 +++ b/hdaudio/src/hda/stream.rs
-@@ -299,7 +299,8 @@ impl StreamBuffer {
+@@ -299,5 +299,6 @@ impl StreamBuffer {
  impl StreamBuffer {
  	pub fn new(block_length: usize, block_count: usize) -> result::Result<StreamBuffer, &'static str> {
 -    let size = block_length + block_count;
 +    // BUG FIX: was block_length + block_count, should be multiplication
 +    let size = block_length * block_count;
      let layout = Layout::from_size_align(size, 4096).unwrap();
-     let ptr: *mut u8 = unsafe { alloc(layout) };
+     let ptr: *mut u8 = unsafe { alloc(layout) }; 

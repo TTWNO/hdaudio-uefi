@@ -1,6 +1,6 @@
 --- a/hdaudio/src/hda/device.rs
 +++ b/hdaudio/src/hda/device.rs
-@@ -218,11 +218,12 @@ impl IntelHDA {
+@@ -218,10 +218,12 @@ impl IntelHDA {
  	pub fn init(&mut self) -> bool {
  		self.reset_controller();
 

@@ -1,6 +1,6 @@
 --- a/hdaudio/src/hda/cmdbuff.rs
 +++ b/hdaudio/src/hda/cmdbuff.rs
-@@ -139,33 +139,15 @@ impl Corb {
+@@ -139,37 +139,11 @@ impl Corb {
      }
 
      pub fn reset_read_pointer(&mut self) {

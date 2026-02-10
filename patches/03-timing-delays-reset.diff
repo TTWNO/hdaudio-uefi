@@ -1,6 +1,6 @@
 --- a/hdaudio/src/hda/device.rs
 +++ b/hdaudio/src/hda/device.rs
-@@ -662,26 +662,44 @@ impl IntelHDA {
+@@ -662,26 +662,45 @@ impl IntelHDA {
  	pub fn reset_controller(&mut self) -> bool {
  		self.regs.statests.write(0xFFFF);
 
@@ -53,3 +53,4 @@
  		}
 
  		let statests = self.regs.statests.read();
+ 		println!("Statests: {:04X}", statests);

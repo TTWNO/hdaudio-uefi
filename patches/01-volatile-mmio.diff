@@ -1,34 +1,35 @@
---- a/hdaudio/src/hda/io.rs
-+++ b/hdaudio/src/hda/io.rs
+--- a/hdaudio/src/hda/io.rs	2026-02-10 12:05:00.042219904 -0700
++++ b/hdaudio/src/hda/io.rs	2026-02-10 12:09:10.274809999 -0700
 @@ -1,8 +1,6 @@
  use core::cmp::PartialEq;
  use core::ops::{BitAnd, BitOr, Not};
-
+ 
 -
 -use core::ptr::{read_unaligned, write_unaligned};
  use core::mem::MaybeUninit;
-
+ 
  #[repr(packed)]
-@@ -36,17 +34,13 @@ impl<T> Io for Mmio<T> where T: Copy + PartialEq + BitAnd<Output = T> + BitOr<O
+@@ -37,18 +35,15 @@
      type Value = T;
-
+ 
      fn read(&self) -> T {
--        unsafe {
--          self.value.assume_init()
+-        unsafe { 
+-					self.value.assume_init()
 -          //let ptr = self.value;
--          //read_unaligned(ptr.as_ptr())
+-         //read_unaligned(ptr.as_ptr())
 +        unsafe {
-+            core::ptr::read_volatile(self.value.as_ptr())
++            core::ptr::read_volatile(core::ptr::addr_of!(self.value) as *const T)
          }
      }
-
+ 
      fn write(&mut self, value: T) {
--        unsafe {
--          *self = Mmio::from(value);
--          //let mut v  = self.value;
--          //write_unaligned(ptr.as_mut_ptr(), value)
+-				*self = Mmio::from(value);
+-        //unsafe { 
+-				//	write_unaligned(*mut self.value, value)
+-        //}
 +        unsafe {
-+            core::ptr::write_volatile(self.value.as_mut_ptr(), value)
-         }
++            core::ptr::write_volatile(core::ptr::addr_of_mut!(self.value) as *mut T, value)
++        }
      }
  }
+ 

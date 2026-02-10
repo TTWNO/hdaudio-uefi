@@ -1,6 +1,6 @@
 --- a/hdaudio/src/main.rs
 +++ b/hdaudio/src/main.rs
-@@ -482,10 +482,38 @@ fn handle_parsed_header(
+@@ -482,10 +482,47 @@ fn handle_parsed_header(
          if let Some(ref args) = driver.command {
              // Enable bus mastering, memory space, and I/O space
              unsafe {

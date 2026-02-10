@@ -1,6 +1,6 @@
 --- a/hdaudio/src/hda/device.rs
 +++ b/hdaudio/src/hda/device.rs
-@@ -567,9 +567,16 @@ impl IntelHDA {
+@@ -567,8 +567,15 @@ impl IntelHDA {
  		output.run();
 
  		println!("Waiting for output 0 to start running...");
