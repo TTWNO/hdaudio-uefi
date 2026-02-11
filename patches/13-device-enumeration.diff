@@ -1,0 +1,181 @@
+diff --git a/hdaudio/src/hda/device.rs b/hdaudio/src/hda/device.rs
+index 914e34a..fc3df8f 100755
+--- a/hdaudio/src/hda/device.rs
++++ b/hdaudio/src/hda/device.rs
+@@ -263,10 +263,10 @@ impl IntelHDA {
+ 		node.subnode_count = (temp & 0xff) as u16;
+ 		node.subnode_start = ((temp >> 16) & 0xff) as u16;
+ 
+-		if addr == (0,0) {
++		if addr.1 == 0 {
+ 			return node;
+ 		}
+-		temp = self.cmd.cmd12(addr, 0xF00, 0x04);
++		temp = self.cmd.cmd12(addr, 0xF00, 0x05);
+ 
+ 		node.function_group_type = (temp & 0xff) as u8;
+ 
+@@ -345,58 +345,86 @@ impl IntelHDA {
+ 	pub fn enumerate(&mut self) {
+ 		self.output_pins.clear();
+ 		self.input_pins.clear();
++		self.outputs.clear();
++		self.inputs.clear();
++		self.widget_map.clear();
++		self.beep_addr = (0, 0);
++
++		let codecs = self.codecs.clone();
++		if codecs.is_empty() {
++			println!("IHDA: No codecs found!");
++			return;
++		}
+ 
+-		let codec:u8 = 0;
+-
+-		let root = self.read_node((codec,0));
+-
+-		println!("{}", root);
+-
+-		let root_count = root.subnode_count;
+-		let root_start = root.subnode_start;
+-
+-		//FIXME: So basically the way this is set up is to only support one codec and hopes the first one is an audio
+-		for i in 0..root_count {
+-			let afg = self.read_node((codec, root_start + i));
+-			println!("{}", afg);
+-			let afg_count = afg.subnode_count;
+-			let afg_start = afg.subnode_start;
+-
+-			for j in 0..afg_count {
+-                print!("TRY WIDGET...");
+-                if afg_start + j == 0x22 {
+-                    println!("SKIP!");
+-                    continue;
+-                }
+-				let mut widget = self.read_node((codec, afg_start + j));
+-				println!("WT: {:?}", widget.widget_type());
+-				println!("{}", widget);
+-				widget.is_widget = true;
+-				match widget.widget_type() {
+-					HDAWidgetType::AudioOutput => {self.outputs.push(widget.addr)},
+-					HDAWidgetType::AudioInput  => {self.inputs.push(widget.addr)},
+-					HDAWidgetType::BeepGenerator => {self.beep_addr = widget.addr },
+-					HDAWidgetType::PinComplex => {
+-						print!("PC...");
+-						let config = widget.configuration_default();
+-						print!("check_output...");
+-						if config.is_output() {
+-							print!("true...");
+-							self.output_pins.push(widget.addr);
+-						} else if config.is_input() {
+-							print!("false...");
+-							self.input_pins.push(widget.addr);
+-						}
+-						println!("ok...");
+-					},
+-					_ => {},
++		for &codec in &codecs {
++			println!("IHDA: Enumerating codec {}", codec);
++			let root = self.read_node((codec, 0));
++			println!("{}", root);
++
++			let root_count = root.subnode_count;
++			let root_start = root.subnode_start;
++
++			for i in 0..root_count {
++				let fg_nid = root_start + i;
++				let afg = self.read_node((codec, fg_nid));
++				println!("{}", afg);
++
++				// Only process Audio Function Groups (type 0x01)
++				if afg.function_group_type != 0x01 {
++					println!("IHDA: Skip FG {}:{:02X} (type=0x{:02X}, not AFG)",
++							 codec, fg_nid, afg.function_group_type);
++					continue;
++				}
++
++				// Power on AFG before enumerating widgets (required by spec;
++				// widgets may return all-zeros if AFG is in low-power state)
++				self.set_power_state((codec, fg_nid), 0);
++				let mut power_ticks: u32 = 0;
++				loop {
++					let ps = self.cmd.cmd12((codec, fg_nid), 0xF05, 0x00);
++					if (ps & 0xF) == 0 { break; }
++					power_ticks += 1;
++					if power_ticks > 50000 {
++						println!("IHDA: Warning: AFG did not reach D0 (ps=0x{:X})", ps);
++						break;
++					}
+ 				}
+ 
+-				println!("Add to map: {:?},{:?}", widget.addr(), widget);
+-				self.widget_map.insert(widget.addr(), widget);
++				let afg_count = afg.subnode_count;
++				let afg_start = afg.subnode_start;
++				println!("IHDA: AFG {}:{:02X} has {} widgets starting at NID 0x{:02X}",
++						 codec, fg_nid, afg_count, afg_start);
++
++				for j in 0..afg_count {
++					let nid = afg_start + j;
++					let mut widget = self.read_node((codec, nid));
++					println!("Widget {:02X}:{:02X} WT: {:?}", codec, nid, widget.widget_type());
++					println!("{}", widget);
++					widget.is_widget = true;
++					match widget.widget_type() {
++						HDAWidgetType::AudioOutput => { self.outputs.push(widget.addr) },
++						HDAWidgetType::AudioInput  => { self.inputs.push(widget.addr) },
++						HDAWidgetType::BeepGenerator => { self.beep_addr = widget.addr },
++						HDAWidgetType::PinComplex => {
++							let config = widget.configuration_default();
++							println!("  Pin {:02X}: device={:?} port={:?} config=0x{:08X}",
++									 nid, config.default_device(), config.port_connectivity(),
++									 widget.config_default);
++							if config.is_output() {
++								self.output_pins.push(widget.addr);
++							} else if config.is_input() {
++								self.input_pins.push(widget.addr);
++							}
++						},
++						_ => {},
++					}
++
++					self.widget_map.insert(widget.addr(), widget);
++				}
+ 			}
+ 		}
+-		println!("Done enumeration!");
++		println!("IHDA: Enumeration complete: {} outputs, {} inputs, {} output pins, {} input pins",
++				 self.outputs.len(), self.inputs.len(), self.output_pins.len(), self.input_pins.len());
+ 	}
+ 
+ 	pub fn find_best_output_pin(&mut self) -> Option<WidgetAddr>{
+@@ -446,8 +474,27 @@ impl IntelHDA {
+ 				}
+ 			}
+ 
+-			println!("None!");
+-			None
++			// Fallback: try by device priority without sequence restriction
++			for supported_device in &[
++				DefaultDevice::HPOut,
++				DefaultDevice::Speaker,
++				DefaultDevice::LineOut,
++				DefaultDevice::AUX,
++				DefaultDevice::DigitalOtherOut,
++			] {
++				for &out in outs {
++					let widget = self.widget_map.get(&out).unwrap();
++					let cd = widget.configuration_default();
++					if &cd.default_device() == supported_device {
++						println!("Fallback match: {out:?} ({:?})", cd.default_device());
++						return Some(out);
++					}
++				}
++			}
++
++			// Last resort: return first available output pin
++			println!("Last resort pin: {:?}", outs[0]);
++			Some(outs[0])
+ 		}
+ 	}
+ 
