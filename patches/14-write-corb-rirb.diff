@@ -1,0 +1,171 @@
+diff --git a/hdaudio/src/hda/cmdbuff.rs b/hdaudio/src/hda/cmdbuff.rs
+index 248fe6a..cf71722 100644
+--- a/hdaudio/src/hda/cmdbuff.rs
++++ b/hdaudio/src/hda/cmdbuff.rs
+@@ -116,6 +116,9 @@ impl Corb {
+         }
+ 
+         assert!(self.corb_count != 0);
++        // Program the selected CORB size into hardware
++        self.regs.corbsize.write(corbsize);
++
+         let addr = self.corb_base_phys;
+         self.set_address(addr);
+         self.regs.corbwp.write(0);
+@@ -139,48 +142,42 @@ impl Corb {
+     }
+ 
+     pub fn reset_read_pointer(&mut self) {
+-        /*
+-         * FIRST ISSUE/PATCH
+-         * This will loop forever in virtualbox
+-         * So maybe just resetting the read pointer
+-         * and leaving for the specific model?
+-         */
+-        if true {
+-            self.regs.corbrp.writef(CORBRPRST, true);
+-        } else {
+-            // 3.3.21
+-
+-            self.stop();
+-            // Set CORBRPRST to 1
+-            println!("CORBRP {:X}", self.regs.corbrp.read());
+-            self.regs.corbrp.writef(CORBRPRST, true);
+-            println!("CORBRP {:X}", self.regs.corbrp.read());
+-
+-            // Wait for it to become 1
+-            while !self.regs.corbrp.readf(CORBRPRST) {
+-                self.regs.corbrp.writef(CORBRPRST, true);
+-            }
+-            // Clear the bit again
+-            self.regs.corbrp.write(0);
+-
+-            // Read back the bit until zero to verify that it is cleared.
+-
+-            loop {
+-                if !self.regs.corbrp.readf(CORBRPRST) {
+-                    break;
+-                }
+-                self.regs.corbrp.write(0);
+-            }
++        // Section 3.3.21: CORB Read Pointer Reset
++        // 1. Set CORBRPRST to 1
++        self.regs.corbrp.write(CORBRPRST);
++        // 2. Wait for CORBRPRST to read back as 1
++        let mut ticks: u32 = 0;
++        loop {
++            if self.regs.corbrp.readf(CORBRPRST) { break; }
++            ticks += 1;
++            if ticks > 10000 { break; }
++        }
++        // 3. Clear CORBRPRST
++        self.regs.corbrp.write(0);
++        // 4. Wait for CORBRPRST to read back as 0
++        ticks = 0;
++        loop {
++            if !self.regs.corbrp.readf(CORBRPRST) { break; }
++            ticks += 1;
++            if ticks > 10000 { break; }
+         }
+     }
+ 
+     fn send_command(&mut self, cmd: u32) {
+-        // wait for the commands to finish
+-        while (self.regs.corbwp.read() & 0xff) != (self.regs.corbrp.read() & 0xff) {}
++        // Wait for previous commands to be consumed
++        let mut ticks: u32 = 0;
++        while (self.regs.corbwp.read() & 0xff) != (self.regs.corbrp.read() & 0xff) {
++            core::hint::spin_loop();
++            ticks += 1;
++            if ticks > 1_000_000 {
++                println!("CORB: Timeout waiting for command consumption");
++                return;
++            }
++        }
+         let write_pos: usize =
+             ((self.regs.corbwp.read() as usize & 0xFF) + 1) % self.corb_count;
+         unsafe {
+-            *self.corb_base.offset(write_pos as isize) = cmd;
++            core::ptr::write_volatile(self.corb_base.offset(write_pos as isize), cmd);
+         }
+ 
+         self.regs.corbwp.write(write_pos as u16);
+@@ -248,6 +245,8 @@ impl Rirb {
+         }
+ 
+         assert!(self.rirb_count != 0);
++        // Program the selected RIRB size into hardware
++        self.regs.rirbsize.write(rirbsize);
+ 
+         let addr = self.rirb_base_phys;
+         self.set_address(addr);
+@@ -278,13 +277,21 @@ impl Rirb {
+     }
+ 
+     fn read_response(&mut self) -> u64 {
+-        // wait for response
+-        while (self.regs.rirbwp.read() & 0xff) == (self.rirb_rp & 0xff) {}
++        // Wait for response with timeout
++        let mut ticks: u32 = 0;
++        while (self.regs.rirbwp.read() & 0xff) == (self.rirb_rp & 0xff) {
++            core::hint::spin_loop();
++            ticks += 1;
++            if ticks > 1_000_000 {
++                println!("RIRB: Timeout waiting for response");
++                return 0;
++            }
++        }
+         let read_pos: u16 = (self.rirb_rp + 1) % self.rirb_count as u16;
+ 
+         let res: u64;
+         unsafe {
+-            res = *self.rirb_base.offset(read_pos as isize);
++            res = core::ptr::read_volatile(self.rirb_base.offset(read_pos as isize));
+         }
+         self.rirb_rp = read_pos;
+         println!("Rirb: {:08X}", res);
+diff --git a/hdaudio/src/hda/device.rs b/hdaudio/src/hda/device.rs
+index 914e34a..b6d2e01 100755
+--- a/hdaudio/src/hda/device.rs
++++ b/hdaudio/src/hda/device.rs
+@@ -223,9 +223,10 @@ impl IntelHDA {
+ 		self.reset_controller();
+ 
+ 		let use_immediate_command_interface = match self.vend_prod {
+-
+-			0x8086_2668 => false,
+-			_ => true,
++			// ICH6 needs ICI due to early CORB/RIRB errata
++			0x8086_2668 => true,
++			// All other controllers (including AMD): use CORB/RIRB
++			_ => false,
+ 		};
+ 
+ 		self.cmd.init(use_immediate_command_interface);
+@@ -706,18 +707,24 @@ impl IntelHDA {
+ 				break;
+ 			}
+ 		}
++		// Spec section 5.5: minimum 100us reset assertion time
++		for _ in 0..5000 { core::hint::spin_loop(); }
++
+ 		self.regs.gctl.writef(CRST, true);
+ 		loop {
+ 			if self.regs.gctl.readf(CRST) {
+ 				break;
+ 			}
+ 		}
++		// Spec section 4.3: wait for codecs to initialize (~521us minimum)
++		for _ in 0..20000 { core::hint::spin_loop(); }
+ 
++		// Wait for codec status (generous timeout)
+ 		let mut ticks:u32 = 0;
+ 		while self.regs.statests.read() == 0 {
++			core::hint::spin_loop();
+ 			ticks += 1;
+-			if ticks > 10000 { break;}
+-
++			if ticks > 500_000 { break; }
+ 		}
+ 
+ 		let statests = self.regs.statests.read();
